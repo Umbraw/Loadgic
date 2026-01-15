@@ -13,6 +13,7 @@ import { rust } from '@codemirror/lang-rust'
 import { php } from '@codemirror/lang-php'
 import { sql } from '@codemirror/lang-sql'
 import { useMemo } from 'react'
+import { useTheme } from '../../theme/ThemeProvider'
 
 type Props = {
   content: string
@@ -65,6 +66,7 @@ function getLanguageExtension(ext: string) {
 }
 
 export default function FileViewer({ content, filePath }: Props) {
+  const { theme } = useTheme()
   const extensions = useMemo(() => {
     const ext = getExtension(filePath)
     const lang = getLanguageExtension(ext)
@@ -74,7 +76,7 @@ export default function FileViewer({ content, filePath }: Props) {
   return (
     <CodeMirror
       value={content}
-      theme={oneDark}
+      theme={theme === 'dark' ? oneDark : undefined}
       extensions={extensions}
       readOnly
       editable={false}
