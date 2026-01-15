@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-electron/
 release/
+admin_scripts/
 *.log
 *.tsbuildinfo
 .DS_Store

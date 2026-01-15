@@ -1,4 +1,4 @@
-import { useTheme } from '../theme/ThemeProvider'
+import { useTheme, EDITOR_THEMES } from '../theme/ThemeProvider'
 
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme()
@@ -6,6 +6,22 @@ function ThemeToggle() {
     <button className="settings-toggle" onClick={toggleTheme} type="button">
       {theme === 'dark' ? 'On' : 'Off'}
     </button>
+  )
+}
+
+function EditorThemeSelect() {
+  const { editorTheme, setEditorTheme } = useTheme()
+  return (
+    <select
+      value={editorTheme}
+      onChange={(e) => setEditorTheme(e.target.value as typeof editorTheme)}
+    >
+      {EDITOR_THEMES.map((t) => (
+        <option key={t.value} value={t.value}>
+          {t.label}
+        </option>
+      ))}
+    </select>
   )
 }
 
@@ -28,6 +44,10 @@ export default function SettingsPage() {
           <label className="settings-row">
             <span>Dark mode</span>
             <ThemeToggle />
+          </label>
+          <label className="settings-row">
+            <span>Syntax highlighting</span>
+            <EditorThemeSelect />
           </label>
         </div>
       </div>
