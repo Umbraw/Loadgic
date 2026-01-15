@@ -7,6 +7,7 @@ if (process.platform === "linux") {
   app.commandLine.appendSwitch("disable-features", "WaylandWpColorManagerV1");
 }
 let mainWindow = null;
+let settingsWindow = null;
 const IGNORED_DIRS = /* @__PURE__ */ new Set([".git", "node_modules"]);
 let currentProjectRoot = null;
 const BINARY_EXTENSIONS = /* @__PURE__ */ new Set([
@@ -36,6 +37,56 @@ ipcMain.handle("window:close", () => {
 ipcMain.handle("window:toggle-fullscreen", () => {
   if (!mainWindow) return;
   mainWindow.setFullScreen(!mainWindow.isFullScreen());
+});
+ipcMain.handle("window:open-settings", () => {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.focus();
+    return;
+  }
+  const mainBounds = mainWindow?.getBounds();
+  const width = Math.min(720, mainBounds ? Math.floor(mainBounds.width * 0.8) : 720);
+  const height = Math.min(520, mainBounds ? Math.floor(mainBounds.height * 0.8) : 520);
+  const x = mainBounds ? Math.round(mainBounds.x + (mainBounds.width - width) / 2) : void 0;
+  const y = mainBounds ? Math.round(mainBounds.y + (mainBounds.height - height) / 2) : void 0;
+  settingsWindow = new BrowserWindow({
+    title: "Loadgic Settings",
+    width,
+    height,
+    minWidth: 520,
+    minHeight: 420,
+    resizable: true,
+    backgroundColor: "#0f1115",
+    show: false,
+    frame: false,
+    x,
+    y,
+    webPreferences: {
+      preload: path.join(__dirname$1, "preload.mjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+  if (devServerUrl) {
+    settingsWindow.loadURL(`${devServerUrl}#/settings`);
+  } else {
+    settingsWindow.loadFile(path.join(__dirname$1, "../dist/index.html"), {
+      hash: "/settings"
+    });
+  }
+  settingsWindow.once("ready-to-show", () => {
+    settingsWindow?.show();
+  });
+  settingsWindow.on("closed", () => {
+    settingsWindow = null;
+  });
+});
+ipcMain.handle("settings:minimize", () => {
+  settingsWindow?.minimize();
+});
+ipcMain.handle("settings:close", () => {
+  settingsWindow?.close();
 });
 async function readProjectTree(dirPath) {
   async function walk(currentPath) {

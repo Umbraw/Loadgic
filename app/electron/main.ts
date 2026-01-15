@@ -12,6 +12,7 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('disable-features', 'WaylandWpColorManagerV1')
 }
 let mainWindow: BrowserWindow | null = null
+let settingsWindow: BrowserWindow | null = null
 
 const IGNORED_DIRS = new Set(['.git', 'node_modules'])
 let currentProjectRoot: string | null = null
@@ -45,6 +46,66 @@ ipcMain.handle('window:close', () => {
 ipcMain.handle('window:toggle-fullscreen', () => {
   if (!mainWindow) return
   mainWindow.setFullScreen(!mainWindow.isFullScreen())
+})
+
+ipcMain.handle('window:open-settings', () => {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.focus()
+    return
+  }
+  const mainBounds = mainWindow?.getBounds()
+  const defaultWidth = 720
+  const defaultHeight = 520
+  const width = Math.min(720, mainBounds ? Math.floor(mainBounds.width * 0.8) : 720)
+  const height = Math.min(520, mainBounds ? Math.floor(mainBounds.height * 0.8) : 520)
+  const x = mainBounds ? Math.round(mainBounds.x + (mainBounds.width - width) / 2) : undefined
+  const y = mainBounds
+    ? Math.round(mainBounds.y + (mainBounds.height - height) / 2)
+    : undefined
+  settingsWindow = new BrowserWindow({
+    title: 'Loadgic Settings',
+    width,
+    height,
+    minWidth: 520,
+    minHeight: 420,
+    resizable: true,
+    backgroundColor: '#0f1115',
+    show: false,
+    frame: false,
+    x,
+    y,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  })
+
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL
+  if (devServerUrl) {
+    settingsWindow.loadURL(`${devServerUrl}#/settings`)
+  } else {
+    settingsWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+      hash: '/settings',
+    })
+  }
+
+  settingsWindow.once('ready-to-show', () => {
+    settingsWindow?.show()
+  })
+
+  settingsWindow.on('closed', () => {
+    settingsWindow = null
+  })
+})
+
+ipcMain.handle('settings:minimize', () => {
+  settingsWindow?.minimize()
+})
+
+ipcMain.handle('settings:close', () => {
+  settingsWindow?.close()
 })
 
 // Recursively read a directory and build a project tree

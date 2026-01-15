@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react'
 import type { ViewMode } from '../../types/view'
 
 import {
@@ -10,9 +11,10 @@ import {
 interface SidebarProps {
   activeView: ViewMode
   onChangeView: (view: ViewMode) => void
+  onOpenSettingsMenu: (event: MouseEvent<HTMLButtonElement>) => void
 }
 
-function Sidebar({ activeView, onChangeView }: SidebarProps) {
+function Sidebar({ activeView, onChangeView, onOpenSettingsMenu }: SidebarProps) {
   return (
     <aside className="sidebar">
       <div className="sidebar-top">
@@ -44,7 +46,7 @@ function Sidebar({ activeView, onChangeView }: SidebarProps) {
       <div className="sidebar-bottom">
         <button
           className={`menu-btn ${activeView === 'settings' ? 'active' : ''}`}
-          onClick={() => onChangeView('settings')}
+          onClick={onOpenSettingsMenu}
           aria-label="Settings"
         >
           <SettingsIcon size={20} />
