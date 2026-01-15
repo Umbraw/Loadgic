@@ -104,9 +104,9 @@ body {
   align-items: center;
   justify-content: center;
 
-  background: transparent;
-  border: 1px solid transparent;
-  color: #e5e7eb;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
 
   font-size: 12px;
   cursor: pointer;
@@ -115,13 +115,13 @@ body {
 }
 
 .window-controls button:hover {
-  background-color: #1f2933;
-  border-color: #2a3440;
+  background-color: var(--hover);
+  border-color: var(--border-strong);
 }
 
 .window-controls .close:hover {
-  background-color: #dc2626;
-  border-color: #dc2626;
+  background-color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* =========================
@@ -291,7 +291,7 @@ body {
 }
 
 .sidepanel-resizer:hover::before {
-  background-color: #2a3440;
+  background-color: var(--border-strong);
 }
 
 .sidepanel-handle {
@@ -302,10 +302,10 @@ body {
   width: 18px;
   height: 48px;
   border-radius: 0 6px 6px 0;
-  background: #0b0d11;
-  border: 1px solid #1f2933;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
   border-left: none;
-  color: #9ca3af;
+  color: var(--text-muted);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -315,8 +315,8 @@ body {
 }
 
 .sidepanel-handle:hover {
-  background-color: #1f2933;
-  color: #e5e7eb;
+  background-color: var(--hover);
+  color: var(--text);
 }
 
 .sidepanel-handle.hidden {
@@ -341,7 +341,7 @@ body {
 
 .content {
   scrollbar-width: thin;
-  scrollbar-color: #1f2933 transparent;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .content::-webkit-scrollbar {
@@ -349,7 +349,7 @@ body {
 }
 
 .content::-webkit-scrollbar-thumb {
-  background-color: #1f2933;
+  background-color: var(--border-strong);
   border-radius: 999px;
   border: 4px solid transparent;
   background-clip: padding-box;
@@ -402,22 +402,22 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: 1px solid transparent;
-  color: #e5e7eb;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
   font-size: 12px;
   cursor: pointer;
   transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
 .settings-window-controls button:hover {
-  background-color: #1f2933;
-  border-color: #2a3440;
+  background-color: var(--hover);
+  border-color: var(--border-strong);
 }
 
 .settings-window-controls .close:hover {
-  background-color: #dc2626;
-  border-color: #dc2626;
+  background-color: var(--accent);
+  border-color: var(--accent);
 }
 
 .settings-page {
@@ -453,16 +453,23 @@ body {
 }
 
 .settings-row input[type='checkbox'] {
-  accent-color: #4b5563;
+  accent-color: var(--border-strong);
 }
 
 .settings-row select {
-  background: #111827;
-  color: #e5e7eb;
-  border: 1px solid #1f2933;
+  background: var(--bg-panel);
+  color: var(--text);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 12px;
+}
+
+.settings-row select:focus-visible,
+.window-controls button:focus-visible,
+.settings-window-controls button:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 2px;
 }
 
 /* =========================
@@ -474,8 +481,8 @@ body {
   min-width: 200px;
   padding: 8px;
   border-radius: 6px;
-  background: #0b0d11;
-  border: 1px solid #1f2933;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.35);
 }
 
@@ -484,7 +491,7 @@ body {
   padding: 7px 10px;
   background: transparent;
   border: none;
-  color: #e5e7eb;
+  color: var(--text);
   text-align: left;
   font-size: 12px;
   cursor: default;
@@ -492,7 +499,131 @@ body {
 }
 
 .context-menu-item:hover {
-  background: #141a22;
+  background: var(--hover);
+}
+
+/* =========================
+   THEME OVERRIDES
+========================= */
+:root {
+  --bg: #0f1115;
+  --bg-alt: #0b0d11;
+  --bg-panel: #111827;
+  --text: #e5e7eb;
+  --text-muted: #9ca3af;
+  --border: #1f2933;
+  --border-strong: #2a3440;
+  --hover: #1f2933;
+  --accent: #dc2626;
+}
+
+[data-theme='light'] {
+  --bg: #f6f7f9;
+  --bg-alt: #ffffff;
+  --bg-panel: #f3f4f6;
+  --text: #111827;
+  --text-muted: #4b5563;
+  --border: #d1d5db;
+  --border-strong: #c4cbd6;
+  --hover: #e2e8f0;
+  --accent: #dc2626;
+}
+
+body,
+#root,
+.app,
+.titlebar,
+.main,
+.content,
+.settings-shell,
+.settings-titlebar {
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+.sidebar,
+.sidepanel,
+.file-viewer-body,
+.file-viewer .cm-editor,
+.settings-section {
+  background-color: var(--bg-alt);
+  border-color: var(--border);
+}
+
+.files-open-btn,
+.settings-row select {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.titlebar,
+.sidepanel,
+.sidebar,
+.settings-titlebar {
+  border-color: var(--border);
+}
+
+.menu-btn,
+.sidepanel-title,
+.files-root,
+.files-empty,
+.file-viewer-header,
+.settings-section-title {
+  color: var(--text-muted);
+}
+
+.menu-btn:hover,
+.menu-btn.active,
+.sidepanel-toggle:hover,
+.sidepanel-handle:hover,
+.files-open-btn:hover,
+.file-tree-label:hover,
+.file-tree-label.selected {
+  background-color: var(--hover);
+  color: var(--text);
+}
+
+.window-controls button:hover,
+.settings-window-controls button:hover {
+  background-color: var(--hover);
+  border-color: var(--border-strong);
+}
+
+.window-controls .close:hover,
+.settings-window-controls .close:hover {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
+.sidepanel-resizer:hover::before {
+  background-color: var(--border-strong);
+}
+
+.file-viewer .cm-gutters {
+  border-right: 1px solid var(--border);
+}
+
+.file-tree,
+.file-tree-label.file,
+.file-tree-label.dir,
+.settings-row,
+.file-viewer-body {
+  color: var(--text);
+}
+
+.settings-toggle {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.settings-toggle:hover {
+  background: var(--hover);
 }
 
 .content-watermark {
@@ -534,7 +665,7 @@ body {
   color: #e5e7eb;
   white-space: pre;
   scrollbar-width: thin;
-  scrollbar-color: #1f2933 transparent;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 .file-viewer .cm-editor {
@@ -550,7 +681,7 @@ body {
     'Courier New', monospace;
   font-size: 12px;
   scrollbar-width: thin;
-  scrollbar-color: #1f2933 transparent;
+  scrollbar-color: var(--border-strong) transparent;
   background: #0b0d11;
 }
 
@@ -568,7 +699,7 @@ body {
 }
 
 .file-viewer .cm-scroller::-webkit-scrollbar-thumb {
-  background-color: #1f2933;
+  background-color: var(--border-strong);
   border-radius: 999px;
 }
 
@@ -585,7 +716,7 @@ body {
 }
 
 .file-viewer-body::-webkit-scrollbar-thumb {
-  background-color: #1f2933;
+  background-color: var(--border-strong);
   border-radius: 999px;
 }
 
@@ -607,16 +738,16 @@ body {
   height: 30px;
   padding: 0 10px;
   border-radius: 6px;
-  background: #111827;
-  border: 1px solid #1f2933;
-  color: #e5e7eb;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text);
   cursor: pointer;
   font-size: 12px;
   text-align: left;
 }
 
 .files-open-btn:hover {
-  background: #1f2933;
+  background: var(--hover);
 }
 
 .files-root,
@@ -678,7 +809,7 @@ body {
 }
 
 .file-tree::-webkit-scrollbar-thumb {
-  background-color: #1f2933;
+  background-color: var(--border-strong);
   border-radius: 999px;
 }
 

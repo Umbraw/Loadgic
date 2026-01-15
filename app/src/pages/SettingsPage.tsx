@@ -1,3 +1,14 @@
+import { useTheme } from '../theme/ThemeProvider'
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme()
+  return (
+    <button className="settings-toggle" onClick={toggleTheme} type="button">
+      {theme === 'dark' ? 'On' : 'Off'}
+    </button>
+  )
+}
+
 export default function SettingsPage() {
   return (
     <div className="settings-shell">
@@ -12,6 +23,13 @@ export default function SettingsPage() {
       </div>
 
       <div className="settings-page">
+        <div className="settings-section">
+          <div className="settings-section-title">Appearance</div>
+          <label className="settings-row">
+            <span>Dark mode</span>
+            <ThemeToggle />
+          </label>
+        </div>
       </div>
     </div>
   )
