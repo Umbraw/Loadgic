@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { readFile, readdir } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import type { DirNode, TreeNode } from '@/types/project'
+import type { FileContent } from '@/types/file'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // Disable Wayland color management protocol (wp_color_manager_v1) to prevent
@@ -16,15 +17,17 @@ let settingsWindow: BrowserWindow | null = null
 
 const IGNORED_DIRS = new Set(['.git', 'node_modules'])
 let currentProjectRoot: string | null = null
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.ico': 'image/x-icon',
+  '.svg': 'image/svg+xml',
+}
 const BINARY_EXTENSIONS = new Set([
-  '.png',
-  '.jpg',
-  '.jpeg',
-  '.gif',
-  '.webp',
-  '.bmp',
-  '.ico',
-  '.tiff',
   '.pdf',
   '.zip',
   '.rar',
@@ -34,6 +37,7 @@ const BINARY_EXTENSIONS = new Set([
   '.mp3',
   '.wav',
 ])
+const MAX_VIEW_FILE_BYTES = 10 * 1024 * 1024
 
 ipcMain.handle('window:minimize', () => {
   mainWindow?.minimize()
@@ -168,22 +172,37 @@ ipcMain.handle('dialog:open-project', async () => {
   return { rootPath, tree }
 })
 
-ipcMain.handle('file:read', async (_event, filePath: string) => {
+ipcMain.handle(
+  'file:read',
+  async (_event, filePath: string): Promise<FileContent | null> => {
   if (!currentProjectRoot) return null
   const resolvedRoot = path.resolve(currentProjectRoot)
   const resolvedFile = path.resolve(filePath)
   if (!resolvedFile.startsWith(resolvedRoot + path.sep)) {
     return null
   }
-  if (BINARY_EXTENSIONS.has(path.extname(resolvedFile).toLowerCase())) {
-    return null
-  }
   try {
+    const ext = path.extname(resolvedFile).toLowerCase()
     const buffer = await readFile(resolvedFile)
-    if (buffer.includes(0)) return null
-    return buffer.toString('utf-8')
+    if (buffer.length > MAX_VIEW_FILE_BYTES) {
+      return { kind: 'unsupported', reason: 'File too large to preview.' }
+    }
+
+    if (IMAGE_MIME_BY_EXT[ext]) {
+      return {
+        kind: 'image',
+        mime: IMAGE_MIME_BY_EXT[ext],
+        data: buffer.toString('base64'),
+      }
+    }
+
+    if (BINARY_EXTENSIONS.has(ext) || buffer.includes(0)) {
+      return { kind: 'unsupported', reason: 'Binary file format.' }
+    }
+
+    return { kind: 'text', content: buffer.toString('utf-8') }
   } catch {
-    return null
+    return { kind: 'unsupported', reason: 'Failed to read file.' }
   }
 })
 

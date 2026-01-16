@@ -10,15 +10,17 @@ let mainWindow = null;
 let settingsWindow = null;
 const IGNORED_DIRS = /* @__PURE__ */ new Set([".git", "node_modules"]);
 let currentProjectRoot = null;
+const IMAGE_MIME_BY_EXT = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".bmp": "image/bmp",
+  ".ico": "image/x-icon",
+  ".svg": "image/svg+xml"
+};
 const BINARY_EXTENSIONS = /* @__PURE__ */ new Set([
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".gif",
-  ".webp",
-  ".bmp",
-  ".ico",
-  ".tiff",
   ".pdf",
   ".zip",
   ".rar",
@@ -28,6 +30,7 @@ const BINARY_EXTENSIONS = /* @__PURE__ */ new Set([
   ".mp3",
   ".wav"
 ]);
+const MAX_VIEW_FILE_BYTES = 5 * 1024 * 1024;
 ipcMain.handle("window:minimize", () => {
   mainWindow?.minimize();
 });
@@ -138,24 +141,37 @@ ipcMain.handle("dialog:open-project", async () => {
   const tree = await readProjectTree(rootPath);
   return { rootPath, tree };
 });
-ipcMain.handle("file:read", async (_event, filePath) => {
-  if (!currentProjectRoot) return null;
-  const resolvedRoot = path.resolve(currentProjectRoot);
-  const resolvedFile = path.resolve(filePath);
-  if (!resolvedFile.startsWith(resolvedRoot + path.sep)) {
-    return null;
+ipcMain.handle(
+  "file:read",
+  async (_event, filePath) => {
+    if (!currentProjectRoot) return null;
+    const resolvedRoot = path.resolve(currentProjectRoot);
+    const resolvedFile = path.resolve(filePath);
+    if (!resolvedFile.startsWith(resolvedRoot + path.sep)) {
+      return null;
+    }
+    try {
+      const ext = path.extname(resolvedFile).toLowerCase();
+      const buffer = await readFile(resolvedFile);
+      if (buffer.length > MAX_VIEW_FILE_BYTES) {
+        return { kind: "unsupported", reason: "File too large to preview." };
+      }
+      if (IMAGE_MIME_BY_EXT[ext]) {
+        return {
+          kind: "image",
+          mime: IMAGE_MIME_BY_EXT[ext],
+          data: buffer.toString("base64")
+        };
+      }
+      if (BINARY_EXTENSIONS.has(ext) || buffer.includes(0)) {
+        return { kind: "unsupported", reason: "Binary file format." };
+      }
+      return { kind: "text", content: buffer.toString("utf-8") };
+    } catch {
+      return { kind: "unsupported", reason: "Failed to read file." };
+    }
   }
-  if (BINARY_EXTENSIONS.has(path.extname(resolvedFile).toLowerCase())) {
-    return null;
-  }
-  try {
-    const buffer = await readFile(resolvedFile);
-    if (buffer.includes(0)) return null;
-    return buffer.toString("utf-8");
-  } catch {
-    return null;
-  }
-});
+);
 function createWindow() {
   const iconPath = process.env.VITE_DEV_SERVER_URL ? path.join(__dirname$1, "../public/app-icon.png") : path.join(__dirname$1, "../dist/app-icon.png");
   mainWindow = new BrowserWindow({

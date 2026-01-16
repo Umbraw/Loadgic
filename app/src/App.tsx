@@ -3,6 +3,7 @@ import SidePanel from './components/sidebar/SidePanel'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ViewMode } from './types/view'
 import type { ProjectNode } from './types/project'
+import type { FileContent } from './types/file'
 import appLogo from './assets/logo/logo_512_512.png'
 import FileViewer from './components/files/FileViewer'
 
@@ -18,7 +19,9 @@ function App() {
   const [projectRoot, setProjectRoot] = useState<string | null>(null)
   const [projectTree, setProjectTree] = useState<ProjectNode | null>(null)
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
-  const [selectedFileContent, setSelectedFileContent] = useState<string | null>(null)
+  const [selectedFileContent, setSelectedFileContent] = useState<FileContent | null>(
+    null
+  )
   const [settingsMenu, setSettingsMenu] = useState<{ x: number; y: number } | null>(
     null
   )
@@ -153,8 +156,8 @@ function App() {
 
   async function handleSelectFile(filePath: string) {
     setSelectedFilePath(filePath)
-    const content = await window.loadgic?.readFile?.(filePath)
-    setSelectedFileContent(content ?? null)
+    const result = await window.loadgic?.readFile?.(filePath)
+    setSelectedFileContent(result ?? null)
   }
 
   function openSettingsMenu(event: React.MouseEvent<HTMLButtonElement>) {
@@ -229,14 +232,25 @@ function App() {
                 {getBaseName(selectedFilePath ?? '')}
               </div>
               {selectedFileContent ? (
-                <FileViewer
-                  content={selectedFileContent}
-                  filePath={selectedFilePath}
-                />
+                selectedFileContent.kind === 'text' ? (
+                  <FileViewer
+                    content={selectedFileContent.content}
+                    filePath={selectedFilePath}
+                  />
+                ) : selectedFileContent.kind === 'image' ? (
+                  <div className="image-viewer">
+                    <img
+                      src={`data:${selectedFileContent.mime};base64,${selectedFileContent.data}`}
+                      alt={getBaseName(selectedFilePath)}
+                    />
+                  </div>
+                ) : (
+                  <pre className="file-viewer-body">
+                    {selectedFileContent.reason}
+                  </pre>
+                )
               ) : (
-                <pre className="file-viewer-body">
-                  Unsupported or binary file.
-                </pre>
+                <pre className="file-viewer-body">Loading...</pre>
               )}
             </div>
           ) : (
