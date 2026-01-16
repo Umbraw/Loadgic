@@ -1,5 +1,9 @@
 import CodeMirror from '@uiw/react-codemirror'
 import { oneDark } from '@codemirror/theme-one-dark'
+import { dracula } from '@uiw/codemirror-theme-dracula'
+import { githubDark, githubLight } from '@uiw/codemirror-theme-github'
+import { solarizedDark, solarizedLight } from '@uiw/codemirror-theme-solarized'
+import { nordInit } from '@uiw/codemirror-theme-nord'
 import { javascript } from '@codemirror/lang-javascript'
 import { html } from '@codemirror/lang-html'
 import { css } from '@codemirror/lang-css'
@@ -13,11 +17,30 @@ import { rust } from '@codemirror/lang-rust'
 import { php } from '@codemirror/lang-php'
 import { sql } from '@codemirror/lang-sql'
 import { useMemo } from 'react'
+import type { Extension } from '@codemirror/state'
 import { useTheme } from '../../theme/ThemeProvider'
 
 type Props = {
   content: string
   filePath: string
+}
+
+const nord = nordInit({})
+
+function getEditorTheme(editorTheme: string, isDark: boolean): Extension {
+  switch (editorTheme) {
+    case 'dracula':
+      return dracula
+    case 'github':
+      return isDark ? githubDark : githubLight
+    case 'solarized':
+      return isDark ? solarizedDark : solarizedLight
+    case 'nord':
+      return nord
+    case 'oneDark':
+    default:
+      return oneDark
+  }
 }
 
 function getExtension(filePath: string) {
@@ -66,7 +89,7 @@ function getLanguageExtension(ext: string) {
 }
 
 export default function FileViewer({ content, filePath }: Props) {
-  const { theme } = useTheme()
+  const { theme, editorTheme } = useTheme()
   const extensions = useMemo(() => {
     const ext = getExtension(filePath)
     const lang = getLanguageExtension(ext)
@@ -76,7 +99,7 @@ export default function FileViewer({ content, filePath }: Props) {
   return (
     <CodeMirror
       value={content}
-      theme={theme === 'dark' ? oneDark : undefined}
+      theme={getEditorTheme(editorTheme, theme === 'dark')}
       extensions={extensions}
       readOnly
       editable={false}
