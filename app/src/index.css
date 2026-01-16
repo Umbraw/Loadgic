@@ -294,33 +294,30 @@ body {
   background-color: var(--border-strong);
 }
 
-.sidepanel-handle {
-  position: absolute;
-  left: 54px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 18px;
-  height: 48px;
-  border-radius: 0 6px 6px 0;
-  background: var(--bg-alt);
-  border: 1px solid var(--border);
-  border-left: none;
+.panel-open-btn {
+  height: 24px;
+  width: 44px;
+  margin: 6px auto 2px;
+  padding: 0;
   color: var(--text-muted);
-  cursor: pointer;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease, color 0.15s ease;
-  z-index: 3;
 }
 
-.sidepanel-handle:hover {
-  background-color: var(--hover);
+.panel-open-btn:hover {
   color: var(--text);
+  border-color: var(--border-strong);
 }
 
-.sidepanel-handle.hidden {
-  display: none;
+.panel-open-icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.8;
+  transform: translateX(2px);
 }
 
 /* =========================

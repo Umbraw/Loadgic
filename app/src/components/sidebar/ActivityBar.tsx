@@ -12,11 +12,42 @@ interface SidebarProps {
   activeView: ViewMode
   onChangeView: (view: ViewMode) => void
   onOpenSettingsMenu: (event: MouseEvent<HTMLButtonElement>) => void
+  isPanelOpen: boolean
+  onOpenPanel: () => void
 }
 
-function Sidebar({ activeView, onChangeView, onOpenSettingsMenu }: SidebarProps) {
+function Sidebar({
+  activeView,
+  onChangeView,
+  onOpenSettingsMenu,
+  isPanelOpen,
+  onOpenPanel,
+}: SidebarProps) {
   return (
     <aside className="sidebar">
+      {!isPanelOpen && (
+        <button
+          className="menu-btn panel-open-btn"
+          onClick={onOpenPanel}
+          aria-label="Show panel"
+          title="Show panel"
+        >
+          <svg
+            className="panel-open-icon"
+            viewBox="0 0 20 20"
+            aria-hidden="true"
+          >
+            <path
+              d="M6 4l6 6-6 6M2 4l6 6-6 6"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
       <div className="sidebar-top">
         <button
           className={`menu-btn ${activeView === 'files' ? 'active' : ''}`}

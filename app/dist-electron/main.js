@@ -30,7 +30,7 @@ const BINARY_EXTENSIONS = /* @__PURE__ */ new Set([
   ".mp3",
   ".wav"
 ]);
-const MAX_VIEW_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_VIEW_FILE_BYTES = 10 * 1024 * 1024;
 ipcMain.handle("window:minimize", () => {
   mainWindow?.minimize();
 });

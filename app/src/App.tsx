@@ -199,6 +199,8 @@ function App() {
           activeView={activeView}
           onChangeView={selectView}
           onOpenSettingsMenu={openSettingsMenu}
+          isPanelOpen={isPanelOpen}
+          onOpenPanel={() => setIsPanelOpen(true)}
         />
         <SidePanel
           activeView={activeView}
@@ -216,14 +218,6 @@ function App() {
           aria-label="Resize panel"
           role="separator"
         />
-        <button
-          className={`sidepanel-handle ${isPanelOpen ? 'hidden' : ''}`}
-          onClick={() => setIsPanelOpen(true)}
-          aria-label="Show panel"
-          title="Show panel"
-        >
-          ▶
-        </button>
 
         <div className="content">
           {activeView === 'files' && selectedFilePath ? (
