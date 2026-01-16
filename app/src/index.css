@@ -686,6 +686,7 @@ body,
   max-width: 100%;
   width: 100%;
   overflow: hidden;
+  flex: 0 0 auto;
 }
 
 .file-viewer-path {
