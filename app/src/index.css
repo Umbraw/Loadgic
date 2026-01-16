@@ -680,6 +680,62 @@ body,
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.file-viewer-path {
+  color: var(--text-muted);
+  flex: 0 1 auto;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-viewer-name {
+  color: var(--text);
+  font-weight: 600;
+  flex: 0 1 auto;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-viewer-copy {
+  width: auto;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.file-viewer-copy:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--hover);
+}
+
+.file-viewer-copy-icon {
+  font-size: 12px;
+}
+
+.file-viewer-copy-label {
+  font-size: 11px;
+  letter-spacing: 0.02em;
 }
 
 .file-viewer-body {

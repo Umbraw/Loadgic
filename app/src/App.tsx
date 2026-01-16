@@ -160,6 +160,24 @@ function App() {
     setSelectedFileContent(result ?? null)
   }
 
+  async function copyPathToClipboard(filePath: string) {
+    if (!filePath) return
+    try {
+      await navigator.clipboard.writeText(filePath)
+    } catch {
+      // Fallback for restricted clipboard permissions
+      const textarea = document.createElement('textarea')
+      textarea.value = filePath
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+  }
+
   function openSettingsMenu(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault()
     event.stopPropagation()
@@ -172,8 +190,11 @@ function App() {
     await window.loadgic?.openSettingsWindow?.()
   }
 
-  function getBaseName(filePath: string) {
-    return filePath.split(/[/\\\\]/).pop() ?? filePath
+  function splitPath(filePath: string) {
+    const parts = filePath.split(/[/\\\\]/)
+    const name = parts.pop() ?? filePath
+    const dir = parts.join('/')
+    return { dir, name }
   }
 
   return (
@@ -223,7 +244,27 @@ function App() {
           {activeView === 'files' && selectedFilePath ? (
             <div className="file-viewer">
               <div className="file-viewer-header">
-                {getBaseName(selectedFilePath ?? '')}
+                {selectedFilePath ? (
+                  <>
+                    <button
+                      className="file-viewer-copy"
+                      onClick={() => copyPathToClipboard(selectedFilePath)}
+                      aria-label="Copy full path"
+                      title="Copy full path"
+                      type="button"
+                    >
+                      <span className="file-viewer-copy-icon">⧉</span>
+                      <span className="file-viewer-copy-label">Copy</span>
+                    </button>
+                    <span className="file-viewer-path">
+                      {splitPath(selectedFilePath).dir}
+                      {splitPath(selectedFilePath).dir ? '/' : ''}
+                    </span>
+                    <span className="file-viewer-name">
+                      {splitPath(selectedFilePath).name}
+                    </span>
+                  </>
+                ) : null}
               </div>
               {selectedFileContent ? (
                 selectedFileContent.kind === 'text' ? (
@@ -235,7 +276,7 @@ function App() {
                   <div className="image-viewer">
                     <img
                       src={`data:${selectedFileContent.mime};base64,${selectedFileContent.data}`}
-                      alt={getBaseName(selectedFilePath)}
+                      alt={splitPath(selectedFilePath).name}
                     />
                   </div>
                 ) : (
