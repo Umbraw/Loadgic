@@ -34,7 +34,7 @@ function App() {
   function selectView(next: ViewMode) {
     setActiveView((prev) => {
       if (prev === next) {
-        setIsPanelOpen((o) => !o)
+        setIsPanelOpen((open) => (open ? open : true))
         return prev
       }
       setIsPanelOpen(true)
