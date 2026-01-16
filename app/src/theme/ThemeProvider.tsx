@@ -29,9 +29,6 @@ function getInitialTheme(): Theme {
 }
 
 function getInitialEditorTheme(): EditorTheme {
-  if (typeof window === 'undefined') return 'oneDark'
-  const stored = window.localStorage.getItem('loadgic:editorTheme')
-  if (stored && EDITOR_THEMES.some((t) => t.value === stored)) return stored as EditorTheme
   return 'oneDark'
 }
 

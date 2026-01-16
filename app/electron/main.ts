@@ -54,8 +54,8 @@ ipcMain.handle('window:toggle-fullscreen', () => {
 
 ipcMain.handle('window:open-settings', () => {
   if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.focus()
-    return
+    settingsWindow.destroy()
+    settingsWindow = null
   }
   const mainBounds = mainWindow?.getBounds()
   const defaultWidth = 720
