@@ -93,20 +93,29 @@ function App() {
   }, [])
 
   useEffect(() => {
+    let rafId: number | null = null
+
     function handleResize() {
-      const maxPanelWidth = Math.max(
-        MIN_PANEL_WIDTH,
-        window.innerWidth - SIDEBAR_WIDTH - MIN_CONTENT_WIDTH
-      )
-      const nextWidth = Math.min(panelWidthRef.current, maxPanelWidth)
-      if (nextWidth !== panelWidthRef.current) {
-        setPanelWidth(nextWidth)
-        lastOpenWidthRef.current = nextWidth
-      }
+      if (rafId !== null) return
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null
+        const maxPanelWidth = Math.max(
+          MIN_PANEL_WIDTH,
+          window.innerWidth - SIDEBAR_WIDTH - MIN_CONTENT_WIDTH
+        )
+        const nextWidth = Math.min(panelWidthRef.current, maxPanelWidth)
+        if (nextWidth !== panelWidthRef.current) {
+          setPanelWidth(nextWidth)
+          lastOpenWidthRef.current = nextWidth
+        }
+      })
     }
 
     window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      if (rafId !== null) window.cancelAnimationFrame(rafId)
+    }
   }, [])
 
   useEffect(() => {

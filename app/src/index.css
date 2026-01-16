@@ -682,7 +682,7 @@ body,
   padding: 6px 10px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 0;
   max-width: 100%;
   width: 100%;
   overflow: hidden;
@@ -691,20 +691,18 @@ body,
 .file-viewer-path {
   color: var(--text-muted);
   flex: 0 1 auto;
-  max-width: 55%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: inline-block;
 }
 
 .file-viewer-name {
   color: var(--text);
   font-weight: 600;
-  flex: 0 1 auto;
-  max-width: 45%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .file-viewer-copy {
@@ -721,6 +719,7 @@ body,
   font-size: 12px;
   gap: 6px;
   padding: 0 8px;
+  margin-right: 6px;
 }
 
 .file-viewer-copy:hover {
