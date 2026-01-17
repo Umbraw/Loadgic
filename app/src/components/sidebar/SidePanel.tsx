@@ -10,6 +10,7 @@ type Props = {
   projectTree?: ProjectNode | null
   onOpenProject?: () => void
   onSelectFile?: (filePath: string) => void
+  onLoadDir?: (dirPath: string) => void
   selectedFilePath?: string | null
 }
 
@@ -17,17 +18,30 @@ type TreeProps = {
   node: ProjectNode
   level?: number
   onSelectFile?: (filePath: string) => void
+  onLoadDir?: (dirPath: string) => void
   selectedFilePath?: string | null
 }
 
-function TreeNode({ node, level = 0, onSelectFile, selectedFilePath }: TreeProps) {
+function TreeNode({
+  node,
+  level = 0,
+  onSelectFile,
+  onLoadDir,
+  selectedFilePath,
+}: TreeProps) {
   const [isOpen, setIsOpen] = useState(level === 0)
   const isDir = node.type === 'dir'
+  const isLoaded = node.children !== undefined
   const hasChildren = !!node.children?.length
 
   function toggle() {
-    if (!isDir || !hasChildren) return
-    setIsOpen((open) => !open)
+    if (!isDir) return
+    setIsOpen((open) => {
+      if (!open && !isLoaded) {
+        onLoadDir?.(node.path)
+      }
+      return !open
+    })
   }
 
   return (
@@ -45,7 +59,7 @@ function TreeNode({ node, level = 0, onSelectFile, selectedFilePath }: TreeProps
           }
         }}
         onKeyDown={(event) => {
-          if (!isDir || !hasChildren) return
+          if (!isDir) return
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault()
             toggle()
@@ -63,10 +77,16 @@ function TreeNode({ node, level = 0, onSelectFile, selectedFilePath }: TreeProps
               node={child}
               level={level + 1}
               onSelectFile={onSelectFile}
+              onLoadDir={onLoadDir}
               selectedFilePath={selectedFilePath}
             />
           ))
         : null}
+      {isDir && isOpen && node.children === undefined ? (
+        <div className="file-tree-loading" style={{ paddingLeft: `${(level + 1) * 8}px` }}>
+          Loading...
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -79,6 +99,7 @@ export default function SidePanel({
   projectTree,
   onOpenProject,
   onSelectFile,
+  onLoadDir,
   selectedFilePath,
 }: Props) {
   return (
@@ -113,6 +134,7 @@ export default function SidePanel({
                 <TreeNode
                   node={projectTree}
                   onSelectFile={onSelectFile}
+                  onLoadDir={onLoadDir}
                   selectedFilePath={selectedFilePath}
                 />
               </div>

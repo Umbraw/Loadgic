@@ -30,6 +30,7 @@ function App() {
   const panelWidthRef = useRef(panelWidth)
   const isPanelOpenRef = useRef(isPanelOpen)
   const lastOpenWidthRef = useRef(panelWidth)
+  const loadingDirsRef = useRef<Set<string>>(new Set())
 
   function selectView(next: ViewMode) {
     setActiveView((prev) => {
@@ -163,6 +164,38 @@ function App() {
     setSelectedFileContent(null)
   }
 
+  function updateTreeChildren(
+    node: ProjectNode,
+    targetPath: string,
+    children: ProjectNode[]
+  ): ProjectNode {
+    if (node.path === targetPath && node.type === 'dir') {
+      return { ...node, children }
+    }
+    if (!node.children) return node
+    let changed = false
+    const nextChildren = node.children.map((child) => {
+      const nextChild = updateTreeChildren(child, targetPath, children)
+      if (nextChild !== child) changed = true
+      return nextChild
+    })
+    return changed ? { ...node, children: nextChildren } : node
+  }
+
+  async function loadDirectory(dirPath: string) {
+    if (!projectRoot) return
+    const loading = loadingDirsRef.current
+    if (loading.has(dirPath)) return
+    loading.add(dirPath)
+    try {
+      const result = await window.loadgic?.listDir?.(dirPath)
+      if (!result) return
+      setProjectTree((prev) => (prev ? updateTreeChildren(prev, dirPath, result) : prev))
+    } finally {
+      loading.delete(dirPath)
+    }
+  }
+
   async function handleSelectFile(filePath: string) {
     setSelectedFilePath(filePath)
     const result = await window.loadgic?.readFile?.(filePath)
@@ -240,6 +273,7 @@ function App() {
           projectTree={projectTree}
           onOpenProject={openProject}
           onSelectFile={handleSelectFile}
+          onLoadDir={loadDirectory}
           selectedFilePath={selectedFilePath}
         />
         <div

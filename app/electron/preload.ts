@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('loadgic', {
   close: () => ipcRenderer.invoke('window:close'),
   toggleFullscreen: () => ipcRenderer.invoke('window:toggle-fullscreen'),
   openProject: () => ipcRenderer.invoke('dialog:open-project'),
+  listDir: (dirPath: string) => ipcRenderer.invoke('project:list-dir', dirPath),
   readFile: (filePath: string) => ipcRenderer.invoke('file:read', filePath),
   openSettingsWindow: () => ipcRenderer.invoke('window:open-settings'),
   minimizeSettings: () => ipcRenderer.invoke('settings:minimize'),

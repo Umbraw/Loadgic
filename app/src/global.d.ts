@@ -1,6 +1,4 @@
 import type { ProjectNode } from './types/project'
-
-import type { ProjectNode } from './types/project'
 import type { FileContent } from './types/file'
 
 export {}
@@ -12,6 +10,7 @@ declare global {
       close: () => void
       toggleFullscreen: () => void
       openProject: () => Promise<{ rootPath: string; tree: ProjectNode } | null>
+      listDir: (dirPath: string) => Promise<ProjectNode[] | null>
       readFile: (filePath: string) => Promise<FileContent | null>
       openSettingsWindow: () => Promise<void>
       minimizeSettings: () => Promise<void>

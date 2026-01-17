@@ -1,5 +1,5 @@
 //Flexible project node (file or directory).
-//'children' is optional, so it's less strict than TreeNode.
+//'children' is optional; undefined means "not loaded yet".
 export type ProjectNode = {
   name: string
   path: string
