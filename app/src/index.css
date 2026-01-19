@@ -265,8 +265,12 @@ body {
 
 .sidepanel-body {
   padding: 12px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .sidepanel-resizer {
@@ -859,6 +863,8 @@ body,
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
+  min-height: 0;
   height: 100%;
 }
 
@@ -890,14 +896,14 @@ body,
   overflow: auto;
   flex: 1;
   min-height: 0;
+  height: 100%;
   padding: 6px 4px 12px 0;
   scrollbar-width: thin;
   scrollbar-color: #1f2933 transparent;
 }
 
 .files-footer-space {
-  height: 16px;
-  flex: 0 0 auto;
+  display: none;
 }
 
 .file-tree-node {
