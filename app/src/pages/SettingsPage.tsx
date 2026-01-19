@@ -25,7 +25,12 @@ function EditorThemeSelect() {
   )
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
 export default function SettingsPage() {
+  const { logicSettings, setLogicSettings } = useTheme()
   return (
     <div className="settings-shell">
       <div className="settings-titlebar">
@@ -48,6 +53,37 @@ export default function SettingsPage() {
           <label className="settings-row">
             <span>Syntax highlighting</span>
             <EditorThemeSelect />
+          </label>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-title">Logic View</div>
+          <label className="settings-row">
+            <span>Default depth</span>
+            <input
+              type="number"
+              min={1}
+              max={6}
+              value={logicSettings.maxDepth}
+              onChange={(event) => {
+                const next = clamp(Number(event.target.value || 0), 1, 6)
+                setLogicSettings({ ...logicSettings, maxDepth: next })
+              }}
+            />
+          </label>
+          <label className="settings-row">
+            <span>Auto-collapse after N children</span>
+            <input
+              type="number"
+              min={5}
+              max={100}
+              step={1}
+              value={logicSettings.maxChildren}
+              onChange={(event) => {
+                const next = clamp(Number(event.target.value || 0), 5, 100)
+                setLogicSettings({ ...logicSettings, maxChildren: next })
+              }}
+            />
           </label>
         </div>
       </div>

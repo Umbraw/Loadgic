@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js'
 import type { ProjectNode } from '../../types/project'
+import { useTheme } from '../../theme/ThemeProvider'
 
 type LogicViewProps = {
   projectTree: ProjectNode | null
 }
 
 export default function LogicView({ projectTree }: LogicViewProps) {
+  const { logicSettings } = useTheme()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const appRef = useRef<Application | null>(null)
   const rootRef = useRef<Container | null>(null)
@@ -132,9 +134,15 @@ export default function LogicView({ projectTree }: LogicViewProps) {
   }, [projectTree])
 
   useEffect(() => {
-    if (!projectTree || collapseInitRef.current) return
-    const MAX_CHILDREN = 10
-    const MAX_DEPTH = 1
+    if (!userToggledRef.current) {
+      collapseInitRef.current = false
+    }
+  }, [logicSettings])
+
+  useEffect(() => {
+    if (!projectTree || collapseInitRef.current || userToggledRef.current) return
+    const MAX_CHILDREN = logicSettings.maxChildren
+    const MAX_DEPTH = logicSettings.maxDepth
     const nextCollapsed = new Set<string>()
 
     function walk(node: ProjectNode, level: number) {
@@ -149,7 +157,7 @@ export default function LogicView({ projectTree }: LogicViewProps) {
     walk(projectTree, 0)
     setCollapsedDirs(nextCollapsed)
     collapseInitRef.current = true
-  }, [projectTree])
+  }, [projectTree, logicSettings])
 
   useEffect(() => {
     const root = rootRef.current
