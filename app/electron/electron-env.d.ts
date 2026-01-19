@@ -32,9 +32,10 @@ declare global {
     loadgic: {
       minimize: () => void
       close: () => void
-      toggleFullscreen: () => void
-      openProject: () => Promise<{ rootPath: string; tree: ProjectNode } | null>
-      listDir: (dirPath: string) => Promise<ProjectNode[] | null>
+    toggleFullscreen: () => void
+    openProject: () => Promise<{ rootPath: string; tree: ProjectNode } | null>
+    readProjectTree: () => Promise<ProjectNode | null>
+    listDir: (dirPath: string) => Promise<ProjectNode[] | null>
       readFile: (filePath: string) => Promise<FileContent | null>
       openSettingsWindow: () => Promise<void>
       minimizeSettings: () => Promise<void>

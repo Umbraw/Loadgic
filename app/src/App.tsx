@@ -6,6 +6,7 @@ import type { ProjectNode } from './types/project'
 import type { FileContent } from './types/file'
 import appLogo from './assets/logo/logo_512_512.png'
 import FileViewer from './components/files/FileViewer'
+import LogicView from './components/logic/LogicView'
 
 const SIDEBAR_WIDTH = 54
 const MIN_PANEL_WIDTH = 220
@@ -31,6 +32,8 @@ function App() {
   const isPanelOpenRef = useRef(isPanelOpen)
   const lastOpenWidthRef = useRef(panelWidth)
   const loadingDirsRef = useRef<Set<string>>(new Set())
+  const fullTreeLoadedRef = useRef<string | null>(null)
+  const fullTreeLoadingRef = useRef(false)
 
   function selectView(next: ViewMode) {
     setActiveView((prev) => {
@@ -162,6 +165,8 @@ function App() {
     setProjectTree(result.tree)
     setSelectedFilePath(null)
     setSelectedFileContent(null)
+    fullTreeLoadedRef.current = null
+    fullTreeLoadingRef.current = false
   }
 
   function updateTreeChildren(
@@ -195,6 +200,25 @@ function App() {
       loading.delete(dirPath)
     }
   }
+
+  useEffect(() => {
+    if (activeView !== 'logic' || !projectRoot) return
+    if (fullTreeLoadedRef.current === projectRoot || fullTreeLoadingRef.current) {
+      return
+    }
+    fullTreeLoadingRef.current = true
+    window.loadgic
+      ?.readProjectTree?.()
+      .then((tree) => {
+        if (tree) {
+          setProjectTree(tree)
+          fullTreeLoadedRef.current = projectRoot
+        }
+      })
+      .finally(() => {
+        fullTreeLoadingRef.current = false
+      })
+  }, [activeView, projectRoot])
 
   async function handleSelectFile(filePath: string) {
     setSelectedFilePath(filePath)
@@ -283,8 +307,10 @@ function App() {
           role="separator"
         />
 
-        <div className="content">
-          {activeView === 'files' && selectedFilePath ? (
+        <div className={`content${activeView === 'logic' ? ' logic-view' : ''}`}>
+          {activeView === 'logic' ? (
+            <LogicView projectTree={projectTree} />
+          ) : activeView === 'files' && selectedFilePath ? (
             <div className="file-viewer">
               <div className="file-viewer-header">
                 {selectedFilePath ? (

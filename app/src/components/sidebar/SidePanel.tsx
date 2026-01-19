@@ -118,8 +118,7 @@ export default function SidePanel({
       </div>
 
       <div className="sidepanel-body">
-        {activeView === 'logic' && <div>Logic options</div>}
-        {activeView === 'files' && (
+        {(activeView === 'files' || activeView === 'logic' || activeView === 'run') && (
           <div className="files-panel">
             <button className="files-open-btn" onClick={onOpenProject}>
               Open project folder
@@ -142,7 +141,6 @@ export default function SidePanel({
             <div className="files-footer-space" />
           </div>
         )}
-        {activeView === 'run' && <div>Run options</div>}
         {activeView === 'settings' && <div>Settings options</div>}
       </div>
     </aside>

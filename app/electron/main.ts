@@ -138,6 +138,51 @@ async function listProjectDir(dirPath: string): Promise<ProjectNode[]> {
   })
 }
 
+// Recursively read a directory and build a project tree
+async function readProjectTree(dirPath: string): Promise<ProjectNode> {
+  async function walk(currentPath: string): Promise<ProjectNode[]> {
+    let entries: Dirent[]
+    try {
+      entries = await readdir(currentPath, { withFileTypes: true })
+    } catch {
+      return []
+    }
+
+    const sortedEntries = entries
+      .filter((entry) => !IGNORED_DIRS.has(entry.name))
+      .sort((a, b) => {
+        if (a.isDirectory() !== b.isDirectory()) {
+          return a.isDirectory() ? -1 : 1
+        }
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+      })
+
+    const children: ProjectNode[] = await Promise.all(
+      sortedEntries.map(async (entry) => {
+        const entryPath = path.join(currentPath, entry.name)
+        if (entry.isDirectory()) {
+          return {
+            name: entry.name,
+            path: entryPath,
+            type: 'dir',
+            children: await walk(entryPath),
+          }
+        }
+        return { name: entry.name, path: entryPath, type: 'file' }
+      })
+    )
+
+    return children
+  }
+
+  return {
+    name: path.basename(dirPath),
+    path: dirPath,
+    type: 'dir',
+    children: await walk(dirPath),
+  }
+}
+
 // Handle open directory selector
 ipcMain.handle('dialog:open-project', async () => {
   if (!mainWindow) return null
@@ -159,6 +204,11 @@ ipcMain.handle('dialog:open-project', async () => {
       children,
     } as ProjectNode,
   }
+})
+
+ipcMain.handle('project:read-tree', async () => {
+  if (!currentProjectRoot) return null
+  return readProjectTree(currentProjectRoot)
 })
 
 ipcMain.handle('project:list-dir', async (_event, dirPath: string) => {
