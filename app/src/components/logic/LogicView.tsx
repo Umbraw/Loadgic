@@ -8,7 +8,7 @@ type LogicViewProps = {
 }
 
 export default function LogicView({ projectTree }: LogicViewProps) {
-  const { logicSettings } = useTheme()
+  const { logicSettings, theme } = useTheme()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const appRef = useRef<Application | null>(null)
   const rootRef = useRef<Container | null>(null)
@@ -35,7 +35,7 @@ export default function LogicView({ projectTree }: LogicViewProps) {
 
       const app = new Application()
       await app.init({
-        background: '#0f1115',
+        background: theme === 'light' ? '#f8fafc' : '#0f1115',
         antialias: true,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,
@@ -121,6 +121,15 @@ export default function LogicView({ projectTree }: LogicViewProps) {
   }, [])
 
   useEffect(() => {
+    const app = appRef.current
+    if (!app) return
+    const color = theme === 'light' ? 0xf8fafc : 0x0f1115
+    if (app.renderer?.background) {
+      app.renderer.background.color = color
+    }
+  }, [theme])
+
+  useEffect(() => {
     const nextRoot = projectTree?.path ?? null
     if (nextRoot && nextRoot !== lastRootPathRef.current) {
       lastRootPathRef.current = nextRoot
@@ -165,13 +174,14 @@ export default function LogicView({ projectTree }: LogicViewProps) {
 
     root.removeChildren().forEach((child) => child.destroy?.())
 
+    const isLight = theme === 'light'
     const labelStyle = new TextStyle({
-      fill: '#e2e8f0',
+      fill: isLight ? '#0f172a' : '#e2e8f0',
       fontSize: 13,
       fontFamily: 'Arial',
     })
     const badgeStyle = new TextStyle({
-      fill: '#0b1220',
+      fill: isLight ? '#0f172a' : '#0b1220',
       fontSize: 10,
       fontFamily: 'Arial',
       fontWeight: '600',
@@ -181,12 +191,13 @@ export default function LogicView({ projectTree }: LogicViewProps) {
       width: 210,
       height: 38,
       radius: 9,
-      fillDir: 0x1b2736,
-      fillFile: 0x141c28,
-      strokeDir: 0x3b526f,
-      strokeFile: 0x2b3a50,
-      accentDir: 0x7dd3fc,
-      accentFile: 0xa78bfa,
+      fillDir: isLight ? 0xf8fafc : 0x1b2736,
+      fillFile: isLight ? 0xe2e8f0 : 0x141c28,
+      strokeDir: isLight ? 0x94a3b8 : 0x3b526f,
+      strokeFile: isLight ? 0x94a3b8 : 0x2b3a50,
+      accentDir: isLight ? 0x38bdf8 : 0x7dd3fc,
+      accentFile: isLight ? 0x8b5cf6 : 0xa78bfa,
+      linkColor: isLight ? 0x94a3b8 : 0x8aa0c2,
     }
 
     function truncateLabel(label: string, max = 28) {
@@ -354,9 +365,9 @@ export default function LogicView({ projectTree }: LogicViewProps) {
       links.lineTo(endX, endY)
     })
 
-    links.stroke({ color: 0x8aa0c2, width: 2, alpha: 0.85 })
+    links.stroke({ color: nodeStyle.linkColor, width: 2, alpha: 0.85 })
     root.addChildAt(links, 0)
-  }, [projectTree, isReady, collapsedDirs])
+  }, [projectTree, isReady, collapsedDirs, theme])
 
   return <div className="logic-canvas" ref={hostRef} />
 }
