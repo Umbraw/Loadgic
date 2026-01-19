@@ -12,6 +12,8 @@ export default function LogicView({ projectTree }: LogicViewProps) {
   const rootRef = useRef<Container | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
   const lastRootPathRef = useRef<string | null>(null)
+  const collapseInitRef = useRef(false)
+  const userToggledRef = useRef(false)
   const [isReady, setIsReady] = useState(false)
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(() => new Set())
   const interactionRef = useRef({
@@ -121,7 +123,32 @@ export default function LogicView({ projectTree }: LogicViewProps) {
     if (nextRoot && nextRoot !== lastRootPathRef.current) {
       lastRootPathRef.current = nextRoot
       setCollapsedDirs(new Set())
+      collapseInitRef.current = false
+      userToggledRef.current = false
     }
+    if (nextRoot && !userToggledRef.current) {
+      collapseInitRef.current = false
+    }
+  }, [projectTree])
+
+  useEffect(() => {
+    if (!projectTree || collapseInitRef.current) return
+    const MAX_CHILDREN = 10
+    const MAX_DEPTH = 1
+    const nextCollapsed = new Set<string>()
+
+    function walk(node: ProjectNode, level: number) {
+      if (node.type === 'dir') {
+        if ((node.children?.length ?? 0) > MAX_CHILDREN || level >= MAX_DEPTH) {
+          nextCollapsed.add(node.path)
+        }
+        node.children?.forEach((child) => walk(child, level + 1))
+      }
+    }
+
+    walk(projectTree, 0)
+    setCollapsedDirs(nextCollapsed)
+    collapseInitRef.current = true
   }, [projectTree])
 
   useEffect(() => {
@@ -289,6 +316,7 @@ export default function LogicView({ projectTree }: LogicViewProps) {
       const label = isDir ? `${entry.node.name}/` : entry.node.name
       const nodeGraphic = createNode(label, isDir, isCollapsed, () => {
         if (!isDir) return
+        userToggledRef.current = true
         setCollapsedDirs((prev) => {
           const next = new Set(prev)
           if (next.has(entry.node.path)) {
