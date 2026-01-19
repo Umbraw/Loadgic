@@ -28,6 +28,7 @@ This project is built with:
 * TypeScript
 * Electron
 * CodeMirror 6 (file viewer)
+* PixiJS
 
 ## Features
 
