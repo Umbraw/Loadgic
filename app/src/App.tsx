@@ -475,7 +475,6 @@ function App() {
                 strokeLinecap="round"
               />
             </svg>
-            <span className="inspector-open-label">Inspector</span>
           </button>
         ) : null}
         <aside className="inspector">

@@ -407,7 +407,8 @@ body {
   right: 8px;
   top: 8px;
   height: 32px;
-  padding: 0 12px;
+  width: 36px;
+  padding: 0;
   color: #ea580c;
   border: 1px solid #ea580c;
   border-radius: 6px;
@@ -417,7 +418,6 @@ body {
   justify-content: center;
   cursor: pointer;
   z-index: 3;
-  gap: 6px;
 }
 
 .inspector-open-btn:hover {
@@ -432,11 +432,6 @@ body {
   line-height: 1;
 }
 
-.inspector-open-label {
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
 
 .panel-open-icon {
   width: 18px;
