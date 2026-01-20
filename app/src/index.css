@@ -245,6 +245,134 @@ body {
   color: var(--text-muted);
 }
 
+.inspector-scroll {
+  overflow-y: auto;
+}
+
+.inspector-section {
+  padding: 6px 0 10px;
+  margin-bottom: 10px;
+}
+
+.inspector-section-title {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: none;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inspector-section-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inspector-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.inspector-item {
+  color: var(--text);
+  font-size: 12px;
+  width: 100%;
+}
+
+.inspector-item-title {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.inspector-item-sub {
+  color: var(--text-muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.inspector-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.inspector-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.inspector-caret {
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--text-muted);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transform: translateY(0.5px);
+}
+
+.inspector-caret.open {
+  transform: rotate(90deg) translateY(-1px);
+}
+
+.inspector-summary {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  margin-bottom: 12px;
+}
+
+.inspector-summary-title {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.inspector-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.inspector-summary-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.inspector-summary-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.inspector-muted {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.inspector-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .sidepanel.closed {
   border-right: none;
 }

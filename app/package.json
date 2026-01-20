@@ -26,6 +26,8 @@
     "@codemirror/lang-xml": "^6.1.0",
     "@codemirror/lang-yaml": "^6.1.0",
     "@codemirror/theme-one-dark": "^6.1.2",
+    "@babel/parser": "^7.28.4",
+    "@babel/traverse": "^7.28.4",
     "@uiw/codemirror-theme-dracula": "^4.25.4",
     "@uiw/codemirror-theme-github": "^4.25.4",
     "@uiw/codemirror-theme-nord": "^4.25.4",
@@ -37,6 +39,7 @@
     "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
+    "@types/babel__traverse": "^7.20.6",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "@typescript-eslint/eslint-plugin": "^7.1.1",

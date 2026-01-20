@@ -7,6 +7,7 @@ import type { FileContent } from './types/file'
 import appLogo from './assets/logo/logo_512_512.png'
 import FileViewer from './components/files/FileViewer'
 import LogicView from './components/logic/LogicView'
+import InspectorPanel from './components/inspector/InspectorPanel'
 
 const SIDEBAR_WIDTH = 54
 const MIN_PANEL_WIDTH = 220
@@ -491,7 +492,10 @@ function App() {
               <span className="inspector-toggle-text">Hide</span>
             </button>
           </div>
-          <div className="inspector-body">No selection</div>
+          <InspectorPanel
+            filePath={selectedFilePath}
+            fileContent={selectedFileContent}
+          />
         </aside>
         {isInspectorOpen ? (
           <div
