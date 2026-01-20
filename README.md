@@ -122,6 +122,35 @@ On Linux, you will typically get:
 
 ---
 
+## Run the built application (Windows)
+
+After running:
+
+```bash
+npm run build
+```
+
+On Windows, the build typically generates in:
+
+app/release/<version>/
+
+One or more of the following files:
+
+A .exe installer (recommended)
+
+A win-unpacked/ folder containing the portable executable
+
+Option 1 — Installer (.exe)
+Simply double-click the generated .exe file and follow the installer.
+
+Option 2 — Portable version
+You can also run the executable directly:
+
+```bash
+cd app/release/0.0.1/win-unpacked
+Loadgic.exe
+```
+
 ## Run the built application (Linux)
 
 ### Option 1 — AppImage (recommended)
