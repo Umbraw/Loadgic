@@ -230,7 +230,7 @@ body {
   border-bottom: 1px solid var(--border);
   font-size: 12px;
   font-weight: 600;
-  color: #ea580c;
+  color: #f59e7b;
   letter-spacing: 0.04em;
   display: flex;
   align-items: center;
@@ -314,7 +314,11 @@ body {
 
 .inspector-count {
   font-size: 11px;
-  color: var(--text-muted);
+  color: var(--text);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 6px;
 }
 
 .inspector-caret {
@@ -537,8 +541,8 @@ body {
   height: 32px;
   width: 36px;
   padding: 0;
-  color: #ea580c;
-  border: 1px solid #ea580c;
+  color: #f59e7b;
+  border: 1px solid #f59e7b;
   border-radius: 6px;
   background: var(--bg-alt);
   display: inline-flex;
@@ -549,8 +553,8 @@ body {
 }
 
 .inspector-open-btn:hover {
-  color: #f97316;
-  border-color: #f97316;
+  color: #fb9b78;
+  border-color: #fb9b78;
 }
 
 .inspector-open-icon {
