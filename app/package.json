@@ -3,16 +3,24 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "main": "dist-electron/main.js",
+
   "scripts": {
-    "clean": "rm -rf dist dist-electron release builder-debug.yml builder-effective-config.yaml",
-    "dev": "ELECTRON_OZONE_PLATFORM_HINT=x11 vite",
-    "dev:x11": "ELECTRON_OZONE_PLATFORM_HINT=x11 vite",
-    "dev:wayland": "ELECTRON_OZONE_PLATFORM_HINT=wayland vite",
+    "clean": "rimraf dist dist-electron release builder-debug.yml builder-effective-config.yaml node_modules .vite .electron .eslintcache coverage npm-debug.log* yarn-debug.log* yarn-error.log* pnpm-debug.log*",
+
+    "dev": "vite",
+    "dev:x11": "cross-env ELECTRON_OZONE_PLATFORM_HINT=x11 vite",
+    "dev:wayland": "cross-env ELECTRON_OZONE_PLATFORM_HINT=wayland vite",
+
     "build": "tsc && vite build && electron-builder",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
+
   "dependencies": {
+    "@babel/parser": "^7.28.4",
+    "@babel/traverse": "^7.28.4",
+
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",
     "@codemirror/lang-java": "^6.0.1",
@@ -26,25 +34,31 @@
     "@codemirror/lang-xml": "^6.1.0",
     "@codemirror/lang-yaml": "^6.1.0",
     "@codemirror/theme-one-dark": "^6.1.2",
-    "@babel/parser": "^7.28.4",
-    "@babel/traverse": "^7.28.4",
+
     "@uiw/codemirror-theme-dracula": "^4.25.4",
     "@uiw/codemirror-theme-github": "^4.25.4",
     "@uiw/codemirror-theme-nord": "^4.25.4",
     "@uiw/codemirror-theme-solarized": "^4.25.4",
     "@uiw/react-codemirror": "^4.22.3",
+
     "pixi.js": "^8.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.26.2"
   },
+
   "devDependencies": {
     "@types/babel__traverse": "^7.20.6",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
+
     "@typescript-eslint/eslint-plugin": "^7.1.1",
     "@typescript-eslint/parser": "^7.1.1",
     "@vitejs/plugin-react": "^4.2.1",
+
+    "cross-env": "^7.0.3",
+    "rimraf": "^6.0.1",
+
     "electron": "^39.2.7",
     "electron-builder": "^24.13.3",
     "eslint": "^8.57.0",
@@ -55,8 +69,8 @@
     "vite-plugin-electron": "^0.28.6",
     "vite-plugin-electron-renderer": "^0.14.5"
   },
+
   "overrides": {
     "tar": "^7.5.3"
-  },
-  "main": "dist-electron/main.js"
+  }
 }

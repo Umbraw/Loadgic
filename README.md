@@ -18,23 +18,27 @@
 
 ## Overview
 
-**Loadgic** is an open-source desktop application that visualizes code logic and execution flow.
+**Loadgic** is an open-source desktop application that visualizes code logic and execution flow.  
 It helps developers better understand, analyze, and debug their programs by transforming complex code structures into intuitive visual representations.
 
 This project is built with:
 
-* Vite
-* React
-* TypeScript
-* Electron
-* CodeMirror 6 (file viewer)
-* PixiJS
+* Vite  
+* React  
+* TypeScript  
+* Electron  
+* CodeMirror 6 (file viewer)  
+* PixiJS  
+* Babel (parser/traverse for TS/JS structural analysis)  
+
+---
 
 ## Features
 
-* Project folder import and tree explorer
-* File viewer with syntax highlighting (CodeMirror)
-* Binary files are detected and skipped in the viewer
+* Project folder import and tree explorer  
+* File viewer with syntax highlighting (CodeMirror)  
+* Binary files are detected and skipped in the viewer  
+* Inspector: structural analysis of selected TS/JS files  
 
 ---
 
@@ -42,8 +46,8 @@ This project is built with:
 
 To work on the project locally, you need:
 
-* Node.js **18+** (recommended)
-* npm (included with Node.js)
+* Node.js **20+** (recommended)  
+* npm (included with Node.js)  
 
 ---
 
@@ -54,7 +58,7 @@ From the project root:
 ```bash
 cd app
 npm install
-```
+````
 
 This installs all dependencies required for development.
 
@@ -62,12 +66,25 @@ This installs all dependencies required for development.
 
 ## Run in development mode
 
-This launches the app with hot-reload (recommended while coding):
+### Windows (default)
 
 ```bash
 npm run dev
 ```
 
+### Linux (X11)
+
+```bash
+npm run dev:x11
+```
+
+### Linux (Wayland)
+
+```bash
+npm run dev:wayland
+```
+
+This launches the app with hot-reload (recommended while coding).
 Changes in the code will automatically refresh the application.
 
 ---
@@ -118,7 +135,10 @@ chmod +x Loadgic-Linux-0.0.1.AppImage
 
 Or via file manager:
 
-* Right-click the AppImage → Properties → Allow executing → Double click
+* Right-click the AppImage
+* Properties
+* Allow executing
+* Double click
 
 ### Option 2 — Unpacked version
 
@@ -129,9 +149,9 @@ cd app/release/0.0.1/linux-unpacked
 
 ---
 
-## Clean build files (after testing)
+## Clean build files (cross-platform)
 
-To remove all generated build artifacts and clean the project:
+To remove all generated build artifacts and caches (Windows / Linux / macOS):
 
 ```bash
 npm run clean
@@ -144,20 +164,34 @@ This removes:
 * `release/`
 * `builder-debug.yml`
 * `builder-effective-config.yaml`
+* temporary caches and logs
 
-This does **not** delete your source code or dependencies.
+This does **not** delete your source code.
 
 ---
 
 ## Project Scripts Summary
 
-| Command           | Description                          |
-| ----------------- | ------------------------------------ |
-| `npm run dev`     | Launch app in development mode       |
-| `npm run build`   | Build and package the app            |
-| `npm run clean`   | Remove all build artifacts           |
-| `npm run preview` | Preview Vite frontend only (browser) |
-| `npm run lint`    | Run ESLint checks                    |
+| Command               | Description                                        |
+| --------------------- | -------------------------------------------------- |
+| `npm run dev`         | Launch app in development mode (Windows / default) |
+| `npm run dev:x11`     | Launch app on Linux using X11                      |
+| `npm run dev:wayland` | Launch app on Linux using Wayland                  |
+| `npm run build`       | Build and package the app                          |
+| `npm run clean`       | Remove all build artifacts (cross-platform)        |
+| `npm run preview`     | Preview Vite frontend only (browser)               |
+| `npm run lint`        | Run ESLint checks                                  |
+
+---
+
+## Technical notes (for contributors)
+
+This project uses cross-platform tooling to ensure compatibility between Windows and Linux:
+
+* `cross-env` → allows environment variables in npm scripts across platforms
+* `rimraf` → replaces Unix-only commands like `rm -rf` with a portable solution
+
+This avoids common platform-specific issues in development scripts.
 
 ---
 
@@ -171,3 +205,4 @@ Licensed under the MIT License. See `LICENSE.md`.
 
 Contributions, ideas, and feedback are welcome!
 Feel free to open issues or pull requests on the GitHub repository.
+
