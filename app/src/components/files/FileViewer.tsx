@@ -20,6 +20,7 @@ import { useMemo } from 'react'
 import type { Extension } from '@codemirror/state'
 import { useTheme } from '../../theme/ThemeProvider'
 
+// Props for FileViewer component
 type Props = {
   content: string
   filePath: string
@@ -27,6 +28,7 @@ type Props = {
 
 const nord = nordInit({})
 
+// Function to get the appropriate editor theme
 function getEditorTheme(editorTheme: string, isDark: boolean): Extension {
   switch (editorTheme) {
     case 'dracula':
@@ -43,11 +45,13 @@ function getEditorTheme(editorTheme: string, isDark: boolean): Extension {
   }
 }
 
+// Function to extract file extension
 function getExtension(filePath: string) {
   const match = filePath.toLowerCase().match(/\.([a-z0-9]+)$/)
   return match ? match[1] : ''
 }
 
+// Function to get language extension based on file extension
 function getLanguageExtension(ext: string) {
   switch (ext) {
     case 'js':
@@ -88,6 +92,7 @@ function getLanguageExtension(ext: string) {
   }
 }
 
+// Main FileViewer component
 export default function FileViewer({ content, filePath }: Props) {
   const { theme, editorTheme } = useTheme()
   const extensions = useMemo(() => {

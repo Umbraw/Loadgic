@@ -3,10 +3,12 @@ import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js'
 import type { ProjectNode } from '../../types/project'
 import { useTheme } from '../../theme/ThemeProvider'
 
+// Props for LogicView component
 type LogicViewProps = {
   projectTree: ProjectNode | null
 }
 
+// Main LogicView component
 export default function LogicView({ projectTree }: LogicViewProps) {
   const { logicSettings, theme } = useTheme()
   const hostRef = useRef<HTMLDivElement | null>(null)
@@ -27,6 +29,7 @@ export default function LogicView({ projectTree }: LogicViewProps) {
     scale: 1,
   })
 
+  // Initialize PixiJS application
   useEffect(() => {
     let cancelled = false
 
@@ -39,7 +42,6 @@ export default function LogicView({ projectTree }: LogicViewProps) {
         antialias: true,
         resolution: window.devicePixelRatio || 1,
         autoDensity: true,
-        resizeTo: hostRef.current,
       })
 
       if (cancelled) {
@@ -47,7 +49,15 @@ export default function LogicView({ projectTree }: LogicViewProps) {
         return
       }
 
-      hostRef.current.appendChild(app.canvas)
+      const canvas = app.canvas
+      const themeColor = theme === 'light' ? '#f8fafc' : '#0f1115'
+      canvas.style.background = themeColor
+      hostRef.current.appendChild(canvas)
+      const { width, height } = hostRef.current.getBoundingClientRect()
+      if (width > 0 && height > 0) {
+        app.renderer.resize(width, height)
+      }
+
       const root = new Container()
       root.position.set(40, 40)
       app.stage.addChild(root)
@@ -56,7 +66,6 @@ export default function LogicView({ projectTree }: LogicViewProps) {
       appRef.current = app
       setIsReady(true)
 
-      const canvas = app.canvas
       const onWheel = (event: WheelEvent) => {
         event.preventDefault()
         const state = interactionRef.current
@@ -96,12 +105,30 @@ export default function LogicView({ projectTree }: LogicViewProps) {
       canvas.addEventListener('pointerup', onPointerUp)
       canvas.addEventListener('pointerleave', onPointerUp)
 
+      let resizeRaf = 0
+      const resizeObserver = new ResizeObserver((entries) => {
+        const entry = entries[0]
+        if (!entry) return
+        const { width, height } = entry.contentRect
+        if (resizeRaf) cancelAnimationFrame(resizeRaf)
+        resizeRaf = requestAnimationFrame(() => {
+          if (width > 0 && height > 0) {
+            app.renderer.resize(width, height)
+            app.renderer.background.color = theme === 'light' ? 0xf8fafc : 0x0f1115
+            app.render()
+          }
+        })
+      })
+      resizeObserver.observe(hostRef.current)
+
       cleanupRef.current = () => {
         canvas.removeEventListener('wheel', onWheel)
         canvas.removeEventListener('pointerdown', onPointerDown)
         canvas.removeEventListener('pointermove', onPointerMove)
         canvas.removeEventListener('pointerup', onPointerUp)
         canvas.removeEventListener('pointerleave', onPointerUp)
+        if (resizeRaf) cancelAnimationFrame(resizeRaf)
+        resizeObserver.disconnect()
       }
     }
 
@@ -120,6 +147,7 @@ export default function LogicView({ projectTree }: LogicViewProps) {
     }
   }, [])
 
+  // Update background color on theme change
   useEffect(() => {
     const app = appRef.current
     if (!app) return
@@ -127,8 +155,12 @@ export default function LogicView({ projectTree }: LogicViewProps) {
     if (app.renderer?.background) {
       app.renderer.background.color = color
     }
+    if (app.canvas) {
+      app.canvas.style.background = theme === 'light' ? '#f8fafc' : '#0f1115'
+    }
   }, [theme])
 
+  // Handle project tree changes
   useEffect(() => {
     const nextRoot = projectTree?.path ?? null
     if (nextRoot && nextRoot !== lastRootPathRef.current) {
@@ -142,12 +174,14 @@ export default function LogicView({ projectTree }: LogicViewProps) {
     }
   }, [projectTree])
 
+  // Handle logic settings changes
   useEffect(() => {
     if (!userToggledRef.current) {
       collapseInitRef.current = false
     }
   }, [logicSettings])
 
+  // Initialize collapsed dirs based on settings
   useEffect(() => {
     if (!projectTree || collapseInitRef.current || userToggledRef.current) return
     const MAX_CHILDREN = logicSettings.maxChildren
@@ -168,6 +202,7 @@ export default function LogicView({ projectTree }: LogicViewProps) {
     collapseInitRef.current = true
   }, [projectTree, logicSettings])
 
+  // Render logic view
   useEffect(() => {
     const root = rootRef.current
     if (!root || !isReady) return
@@ -200,10 +235,12 @@ export default function LogicView({ projectTree }: LogicViewProps) {
       linkColor: isLight ? 0x94a3b8 : 0x8aa0c2,
     }
 
+    // Truncate label if too long
     function truncateLabel(label: string, max = 28) {
       return label.length > max ? `${label.slice(0, max - 1)}…` : label
     }
 
+    // Create a node graphic
     function createNode(
       label: string,
       isDir: boolean,
