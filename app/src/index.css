@@ -249,6 +249,26 @@ body {
   overflow-y: auto;
 }
 
+.inspector-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.inspector-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.inspector-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong);
+  border-radius: 999px;
+  border: 4px solid transparent;
+  background-clip: padding-box;
+}
+
+.inspector-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 .inspector-section {
   padding: 6px 0 10px;
   margin-bottom: 10px;
