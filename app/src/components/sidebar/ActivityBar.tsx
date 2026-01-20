@@ -16,6 +16,7 @@ interface SidebarProps {
   onOpenPanel: () => void
 }
 
+// Sidebar component
 function Sidebar({
   activeView,
   onChangeView,

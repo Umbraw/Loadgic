@@ -3,6 +3,7 @@ import type { FileContent } from './types/file'
 
 export {}
 
+// Extend the global Window interface
 declare global {
   interface Window {
     loadgic: {

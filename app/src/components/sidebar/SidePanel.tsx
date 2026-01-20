@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ViewMode } from '../../types/view'
 import type { ProjectNode } from '../../types/project'
 
+// Props for SidePanel component
 type Props = {
   activeView: ViewMode
   isOpen: boolean
@@ -14,6 +15,7 @@ type Props = {
   selectedFilePath?: string | null
 }
 
+// Props for TreeNode component
 type TreeProps = {
   node: ProjectNode
   level?: number
@@ -22,6 +24,7 @@ type TreeProps = {
   selectedFilePath?: string | null
 }
 
+// TreeNode component for rendering file tree
 function TreeNode({
   node,
   level = 0,
@@ -44,6 +47,7 @@ function TreeNode({
     })
   }
 
+  // Render the tree node
   return (
     <div className="file-tree-node" style={{ paddingLeft: `${level * 8}px` }}>
       <div
@@ -91,6 +95,7 @@ function TreeNode({
   )
 }
 
+// SidePanel component
 export default function SidePanel({
   activeView,
   isOpen,
@@ -102,6 +107,7 @@ export default function SidePanel({
   onLoadDir,
   selectedFilePath,
 }: Props) {
+  // Render the side panel
   return (
     <aside className={`sidepanel ${isOpen ? 'open' : 'closed'}`}>
       <div className="sidepanel-header">

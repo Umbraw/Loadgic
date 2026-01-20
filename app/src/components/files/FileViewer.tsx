@@ -28,7 +28,7 @@ type Props = {
 
 const nord = nordInit({})
 
-// Function to get the appropriate editor theme
+// Get the appropriate editor theme
 function getEditorTheme(editorTheme: string, isDark: boolean): Extension {
   switch (editorTheme) {
     case 'dracula':
@@ -45,13 +45,13 @@ function getEditorTheme(editorTheme: string, isDark: boolean): Extension {
   }
 }
 
-// Function to extract file extension
+// Extract file extension
 function getExtension(filePath: string) {
   const match = filePath.toLowerCase().match(/\.([a-z0-9]+)$/)
   return match ? match[1] : ''
 }
 
-// Function to get language extension based on file extension
+// Get language extension based on file extension
 function getLanguageExtension(ext: string) {
   switch (ext) {
     case 'js':

@@ -3,7 +3,7 @@ import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js'
 import type { ProjectNode } from '../../types/project'
 import { useTheme } from '../../theme/ThemeProvider'
 
-// Props for LogicView component
+// LogicView component
 type LogicViewProps = {
   projectTree: ProjectNode | null
 }
@@ -366,6 +366,7 @@ export default function LogicView({ projectTree }: LogicViewProps) {
 
     const links = new Graphics()
 
+    // Create node graphics and position them
     nodes.forEach((entry) => {
       const isDir = entry.node.type === 'dir'
       const isCollapsed = isDir && collapsedDirs.has(entry.node.path)
@@ -387,6 +388,7 @@ export default function LogicView({ projectTree }: LogicViewProps) {
       root.addChild(nodeGraphic)
     })
 
+    // Create links between nodes
     nodes.forEach((entry) => {
       if (entry.parentIndex === null) return
       const parent = nodes[entry.parentIndex]

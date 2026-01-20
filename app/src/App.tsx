@@ -10,6 +10,7 @@ import LogicView from './components/logic/LogicView'
 
 const SIDEBAR_WIDTH = 54
 const MIN_PANEL_WIDTH = 220
+const MIN_INSPECTOR_WIDTH = 220
 const COLLAPSE_THRESHOLD = 140
 const MIN_CONTENT_WIDTH = 200
 
@@ -17,6 +18,8 @@ function App() {
   const [activeView, setActiveView] = useState<ViewMode>('files')
   const [isPanelOpen, setIsPanelOpen] = useState(true)
   const [panelWidth, setPanelWidth] = useState(320)
+  const [isInspectorOpen, setIsInspectorOpen] = useState(true)
+  const [inspectorWidth, setInspectorWidth] = useState(280)
   const [projectRoot, setProjectRoot] = useState<string | null>(null)
   const [projectTree, setProjectTree] = useState<ProjectNode | null>(null)
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
@@ -28,13 +31,18 @@ function App() {
   )
   const settingsMenuRef = useRef<HTMLDivElement | null>(null)
   const isResizingRef = useRef(false)
+  const isInspectorResizingRef = useRef(false)
   const panelWidthRef = useRef(panelWidth)
   const isPanelOpenRef = useRef(isPanelOpen)
   const lastOpenWidthRef = useRef(panelWidth)
+  const inspectorWidthRef = useRef(inspectorWidth)
+  const isInspectorOpenRef = useRef(isInspectorOpen)
+  const lastInspectorWidthRef = useRef(inspectorWidth)
   const loadingDirsRef = useRef<Set<string>>(new Set())
   const fullTreeLoadedRef = useRef<string | null>(null)
   const fullTreeLoadingRef = useRef(false)
 
+  // Select active view
   function selectView(next: ViewMode) {
     setActiveView((prev) => {
       if (prev === next) {
@@ -51,40 +59,86 @@ function App() {
   }, [panelWidth])
 
   useEffect(() => {
+    inspectorWidthRef.current = inspectorWidth
+  }, [inspectorWidth])
+
+  useEffect(() => {
     isPanelOpenRef.current = isPanelOpen
   }, [isPanelOpen])
 
   useEffect(() => {
+    isInspectorOpenRef.current = isInspectorOpen
+  }, [isInspectorOpen])
+
+  useEffect(() => {
     function handleMouseMove(event: MouseEvent) {
-      if (!isResizingRef.current) return
-      const nextWidth = Math.max(0, event.clientX - SIDEBAR_WIDTH)
+      if (isResizingRef.current) {
+        const nextWidth = Math.max(0, event.clientX - SIDEBAR_WIDTH)
 
-      if (nextWidth < COLLAPSE_THRESHOLD) {
-        if (isPanelOpenRef.current) {
-          setIsPanelOpen(false)
+        if (nextWidth < COLLAPSE_THRESHOLD) {
+          if (isPanelOpenRef.current) {
+            setIsPanelOpen(false)
+          }
+          return
         }
-        return
+
+        if (!isPanelOpenRef.current) {
+          setIsPanelOpen(true)
+        }
+
+        const maxPanelWidth = Math.max(
+          MIN_PANEL_WIDTH,
+          window.innerWidth - SIDEBAR_WIDTH - MIN_CONTENT_WIDTH
+        )
+        const clampedWidth = Math.min(
+          Math.max(nextWidth, MIN_PANEL_WIDTH),
+          maxPanelWidth
+        )
+        setPanelWidth(clampedWidth)
+        lastOpenWidthRef.current = clampedWidth
       }
 
-      if (!isPanelOpenRef.current) {
-        setIsPanelOpen(true)
-      }
+      if (isInspectorResizingRef.current) {
+        const nextWidth = Math.max(0, window.innerWidth - event.clientX)
 
-      const maxPanelWidth = Math.max(
-        MIN_PANEL_WIDTH,
-        window.innerWidth - SIDEBAR_WIDTH - MIN_CONTENT_WIDTH
-      )
-      const clampedWidth = Math.min(Math.max(nextWidth, MIN_PANEL_WIDTH), maxPanelWidth)
-      setPanelWidth(clampedWidth)
-      lastOpenWidthRef.current = clampedWidth
+        if (nextWidth < COLLAPSE_THRESHOLD) {
+          if (isInspectorOpenRef.current) {
+            setIsInspectorOpen(false)
+          }
+          return
+        }
+
+        if (!isInspectorOpenRef.current) {
+          setIsInspectorOpen(true)
+        }
+
+        const maxInspectorWidth = Math.max(
+          MIN_INSPECTOR_WIDTH,
+          window.innerWidth - SIDEBAR_WIDTH - MIN_CONTENT_WIDTH
+        )
+        const clampedWidth = Math.min(
+          Math.max(nextWidth, MIN_INSPECTOR_WIDTH),
+          maxInspectorWidth
+        )
+        setInspectorWidth(clampedWidth)
+        lastInspectorWidthRef.current = clampedWidth
+      }
     }
 
     function handleMouseUp() {
-      if (!isResizingRef.current) return
-      isResizingRef.current = false
+      if (isResizingRef.current) {
+        isResizingRef.current = false
 
-      if (!isPanelOpenRef.current) {
-        setPanelWidth(lastOpenWidthRef.current)
+        if (!isPanelOpenRef.current) {
+          setPanelWidth(lastOpenWidthRef.current)
+        }
+      }
+
+      if (isInspectorResizingRef.current) {
+        isInspectorResizingRef.current = false
+        if (!isInspectorOpenRef.current) {
+          setInspectorWidth(lastInspectorWidthRef.current)
+        }
       }
     }
 
@@ -96,6 +150,7 @@ function App() {
     }
   }, [])
 
+  // Handle window resize to adjust panel and inspector widths
   useEffect(() => {
     let rafId: number | null = null
 
@@ -122,6 +177,7 @@ function App() {
     }
   }, [])
 
+  // Handle settings menu close on outside click or Escape key
   useEffect(() => {
     if (!settingsMenu) return
     function handleClose() {
@@ -140,6 +196,7 @@ function App() {
     }
   }, [settingsMenu])
 
+  // Ensure settings menu is within viewport
   useLayoutEffect(() => {
     if (!settingsMenu || !settingsMenuRef.current) return
     const rect = settingsMenuRef.current.getBoundingClientRect()
@@ -153,11 +210,19 @@ function App() {
     }
   }, [settingsMenu])
 
+  // Start resizing side panel
   function startResize(event: React.MouseEvent) {
     event.preventDefault()
     isResizingRef.current = true
   }
 
+  // Start resizing inspector panel
+  function startInspectorResize(event: React.MouseEvent) {
+    event.preventDefault()
+    isInspectorResizingRef.current = true
+  }
+
+  // Open a project
   async function openProject() {
     const result = await window.loadgic?.openProject?.()
     if (!result) return
@@ -169,6 +234,7 @@ function App() {
     fullTreeLoadingRef.current = false
   }
 
+  // Update children of a directory node in the project tree
   function updateTreeChildren(
     node: ProjectNode,
     targetPath: string,
@@ -187,6 +253,7 @@ function App() {
     return changed ? { ...node, children: nextChildren } : node
   }
 
+  // Load a directory's contents
   async function loadDirectory(dirPath: string) {
     if (!projectRoot) return
     const loading = loadingDirsRef.current
@@ -201,6 +268,7 @@ function App() {
     }
   }
 
+  // Load full project tree when logic view is active
   useEffect(() => {
     if (activeView !== 'logic' || !projectRoot) return
     if (fullTreeLoadedRef.current === projectRoot || fullTreeLoadingRef.current) {
@@ -220,12 +288,14 @@ function App() {
       })
   }, [activeView, projectRoot])
 
+  // Handle file selection
   async function handleSelectFile(filePath: string) {
     setSelectedFilePath(filePath)
     const result = await window.loadgic?.readFile?.(filePath)
     setSelectedFileContent(result ?? null)
   }
 
+  // Copy file path to clipboard
   async function copyPathToClipboard(filePath: string) {
     if (!filePath) return
     try {
@@ -244,6 +314,7 @@ function App() {
     }
   }
 
+  // Open settings menu
   function openSettingsMenu(event: React.MouseEvent<HTMLButtonElement>) {
     event.preventDefault()
     event.stopPropagation()
@@ -251,11 +322,13 @@ function App() {
     setSettingsMenu({ x: clientX + 12, y: clientY })
   }
 
+  // Open settings window
   async function handleOpenSettings() {
     setSettingsMenu(null)
     await window.loadgic?.openSettingsWindow?.()
   }
 
+  // Split a file path into directory and name components
   function splitPath(filePath: string) {
     const parts = filePath.split(/[/\\\\]/)
     const name = parts.pop() ?? filePath
@@ -263,6 +336,7 @@ function App() {
     return { dir, name }
   }
 
+  // Render the main application layout
   return (
     <div className="app">
       <div className="titlebar">
@@ -280,7 +354,12 @@ function App() {
 
       <div
         className="main"
-        style={{ ['--panel-width' as any]: isPanelOpen ? `${panelWidth}px` : '0px' }}
+        style={{
+          ['--panel-width' as any]: isPanelOpen ? `${panelWidth}px` : '0px',
+          ['--inspector-width' as any]: isInspectorOpen
+            ? `${inspectorWidth}px`
+            : '0px',
+        }}
       >
         <Sidebar
           activeView={activeView}
@@ -367,6 +446,62 @@ function App() {
             />
           )}
         </div>
+        {!isInspectorOpen ? (
+          <button
+            className="inspector-open-btn"
+            onClick={() => setIsInspectorOpen(true)}
+            aria-label="Show inspector"
+            title="Show inspector"
+            type="button"
+          >
+            <svg
+              className="inspector-open-icon"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+            >
+              <circle
+                cx="9"
+                cy="9"
+                r="5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+              />
+              <path
+                d="M13 13l4 4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+            <span className="inspector-open-label">Inspector</span>
+          </button>
+        ) : null}
+        <aside className="inspector">
+          <div className="inspector-header">
+            <span>INSPECTOR</span>
+            <button
+              className="inspector-toggle"
+              onClick={() => setIsInspectorOpen(false)}
+              aria-label="Hide inspector"
+              title="Hide inspector"
+              type="button"
+            >
+              <span className="inspector-toggle-icon">&gt;</span>
+              <span className="inspector-toggle-text">Hide</span>
+            </button>
+          </div>
+          <div className="inspector-body">No selection</div>
+        </aside>
+        {isInspectorOpen ? (
+          <div
+            className="inspector-resizer"
+            onMouseDown={startInspectorResize}
+            aria-label="Resize inspector"
+            role="separator"
+          />
+        ) : null}
         {settingsMenu ? (
           <div
             className="context-menu"

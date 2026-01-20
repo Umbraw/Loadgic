@@ -1,5 +1,6 @@
 import { useTheme, EDITOR_THEMES } from '../theme/ThemeProvider'
 
+// Toggle button for dark mode
 function ThemeToggle() {
   const { theme, toggleTheme } = useTheme()
   return (
@@ -9,6 +10,7 @@ function ThemeToggle() {
   )
 }
 
+// Dropdown for selecting editor theme
 function EditorThemeSelect() {
   const { editorTheme, setEditorTheme } = useTheme()
   return (
@@ -25,10 +27,12 @@ function EditorThemeSelect() {
   )
 }
 
+// Clamp a number between min and max
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
+// SettingsPage component
 export default function SettingsPage() {
   const { logicSettings, setLogicSettings } = useTheme()
   return (

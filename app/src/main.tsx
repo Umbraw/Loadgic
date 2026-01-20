@@ -6,6 +6,7 @@ import App from './App'
 import SettingsPage from './pages/SettingsPage'
 import './index.css'
 
+// Render the application
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ThemeProvider>
@@ -19,6 +20,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 )
 
+// Listen messages from the main process
 window.loadgic?.onMainMessage?.((message) => {
   console.log(message)
 })
