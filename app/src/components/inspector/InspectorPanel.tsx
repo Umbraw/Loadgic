@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { FileContent } from '../../types/file'
 import { analyzeFileContent } from '../../analyzers'
 
@@ -61,9 +61,24 @@ function Section({
 
 // InspectorPanel component displaying file analysis
 export default function InspectorPanel({ filePath, fileContent }: Props) {
+  const cacheRef = useRef(
+    new Map<string, ReturnType<typeof analyzeFileContent>>()
+  )
+  const hashRef = useRef(new Map<string, string>())
   const outline = useMemo(() => {
     if (!filePath || !fileContent || fileContent.kind !== 'text') return null
-    return analyzeFileContent(filePath, fileContent.content)
+    const cachedHash = hashRef.current.get(filePath)
+    const nextHash = hashText(fileContent.content)
+    if (cachedHash && cachedHash !== nextHash) {
+      cacheRef.current.delete(`${filePath}:${cachedHash}`)
+    }
+    hashRef.current.set(filePath, nextHash)
+    const cacheKey = `${filePath}:${nextHash}`
+    const cached = cacheRef.current.get(cacheKey)
+    if (cached) return cached
+    const next = analyzeFileContent(filePath, fileContent.content)
+    cacheRef.current.set(cacheKey, next)
+    return next
   }, [filePath, fileContent])
 
   if (!filePath) {
@@ -141,4 +156,13 @@ export default function InspectorPanel({ filePath, fileContent }: Props) {
       <Section title="Variables" items={outline.variables} />
     </div>
   )
+}
+
+function hashText(value: string) {
+  let hash = 2166136261
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
 }
