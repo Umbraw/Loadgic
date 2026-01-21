@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FileContent } from '../../types/file'
-import { analyzeFileContent } from '../../analyzers'
+import type { Outline } from '../../analyzers/types'
 
 // Props for InspectorPanel component
 type Props = {
@@ -61,24 +61,43 @@ function Section({
 
 // InspectorPanel component displaying file analysis
 export default function InspectorPanel({ filePath, fileContent }: Props) {
-  const cacheRef = useRef(
-    new Map<string, ReturnType<typeof analyzeFileContent>>()
-  )
-  const hashRef = useRef(new Map<string, string>())
-  const outline = useMemo(() => {
-    if (!filePath || !fileContent || fileContent.kind !== 'text') return null
-    const cachedHash = hashRef.current.get(filePath)
-    const nextHash = hashText(fileContent.content)
-    if (cachedHash && cachedHash !== nextHash) {
-      cacheRef.current.delete(`${filePath}:${cachedHash}`)
+  const workerRef = useRef<Worker | null>(null)
+  const requestIdRef = useRef(0)
+  const [outline, setOutline] = useState<Outline | null>(null)
+  const [hasAnalyzer, setHasAnalyzer] = useState(true)
+
+  useEffect(() => {
+    const worker = new Worker(
+      new URL('../../workers/inspectorWorker.ts', import.meta.url),
+      { type: 'module' }
+    )
+    workerRef.current = worker
+
+    worker.onmessage = (event: MessageEvent) => {
+      const { id, outline: nextOutline, hasAnalyzer: nextHasAnalyzer } = event.data
+      if (id !== requestIdRef.current) return
+      setOutline(nextOutline)
+      setHasAnalyzer(nextHasAnalyzer)
     }
-    hashRef.current.set(filePath, nextHash)
-    const cacheKey = `${filePath}:${nextHash}`
-    const cached = cacheRef.current.get(cacheKey)
-    if (cached) return cached
-    const next = analyzeFileContent(filePath, fileContent.content)
-    cacheRef.current.set(cacheKey, next)
-    return next
+
+    return () => {
+      worker.terminate()
+      workerRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!filePath || !fileContent || fileContent.kind !== 'text') {
+      setOutline(null)
+      setHasAnalyzer(true)
+      return
+    }
+
+    const worker = workerRef.current
+    if (!worker) return
+    const id = requestIdRef.current + 1
+    requestIdRef.current = id
+    worker.postMessage({ id, filePath, content: fileContent.content })
   }, [filePath, fileContent])
 
   if (!filePath) {
@@ -93,10 +112,18 @@ export default function InspectorPanel({ filePath, fileContent }: Props) {
     )
   }
 
-  if (!outline) {
+  if (!hasAnalyzer) {
     return (
       <div className="inspector-body">
         <div className="inspector-muted">No analyzer for this file.</div>
+      </div>
+    )
+  }
+
+  if (!outline) {
+    return (
+      <div className="inspector-body">
+        <div className="inspector-muted">Analyzing...</div>
       </div>
     )
   }
