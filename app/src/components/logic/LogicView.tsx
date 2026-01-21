@@ -6,10 +6,11 @@ import { useTheme } from '../../theme/ThemeProvider'
 // LogicView component
 type LogicViewProps = {
   projectTree: ProjectNode | null
+  selectedFilePath?: string | null
 }
 
 // Main LogicView component
-export default function LogicView({ projectTree }: LogicViewProps) {
+export default function LogicView({ projectTree, selectedFilePath }: LogicViewProps) {
   const { logicSettings, theme } = useTheme()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const appRef = useRef<Application | null>(null)
@@ -181,6 +182,34 @@ export default function LogicView({ projectTree }: LogicViewProps) {
     }
   }, [logicSettings])
 
+  useEffect(() => {
+    if (!selectedFilePath || !projectTree) return
+    const dirPaths = new Set<string>()
+
+    function findPath(node: ProjectNode, target: string): boolean {
+      if (node.path === target) return true
+      if (node.type !== 'dir' || !node.children) return false
+      for (const child of node.children) {
+        if (findPath(child, target)) {
+          dirPaths.add(node.path)
+          return true
+        }
+      }
+      return false
+    }
+
+    if (findPath(projectTree, selectedFilePath)) {
+      setCollapsedDirs((prev) => {
+        let changed = false
+        const next = new Set(prev)
+        dirPaths.forEach((dirPath) => {
+          if (next.delete(dirPath)) changed = true
+        })
+        return changed ? next : prev
+      })
+    }
+  }, [selectedFilePath, projectTree, collapsedDirs])
+
   // Initialize collapsed dirs based on settings
   useEffect(() => {
     if (!projectTree || collapseInitRef.current || userToggledRef.current) return
@@ -245,17 +274,35 @@ export default function LogicView({ projectTree }: LogicViewProps) {
       label: string,
       isDir: boolean,
       isCollapsed: boolean,
+      isSelected: boolean,
       onToggle?: () => void
     ) {
       const container = new Container()
       const accent = isDir ? nodeStyle.accentDir : nodeStyle.accentFile
       const fill = isDir ? nodeStyle.fillDir : nodeStyle.fillFile
-      const stroke = isDir ? nodeStyle.strokeDir : nodeStyle.strokeFile
+      const stroke = isSelected
+        ? 0x2563eb
+        : isDir
+          ? nodeStyle.strokeDir
+          : nodeStyle.strokeFile
 
       const box = new Graphics()
       box.roundRect(0, 0, nodeStyle.width, nodeStyle.height, nodeStyle.radius)
       box.fill(fill)
-      box.stroke({ color: stroke, width: 1.25 })
+      box.stroke({ color: stroke, width: isSelected ? 2.25 : 1.25 })
+
+      if (isSelected) {
+        const glow = new Graphics()
+        glow.roundRect(
+          1,
+          1,
+          nodeStyle.width - 2,
+          nodeStyle.height - 2,
+          Math.max(1, nodeStyle.radius - 1)
+        )
+        glow.stroke({ color: 0x93c5fd, width: 1.5, alpha: 0.45 })
+        container.addChild(glow)
+      }
 
       const innerStroke = new Graphics()
       innerStroke.roundRect(
@@ -371,7 +418,8 @@ export default function LogicView({ projectTree }: LogicViewProps) {
       const isDir = entry.node.type === 'dir'
       const isCollapsed = isDir && collapsedDirs.has(entry.node.path)
       const label = isDir ? `${entry.node.name}/` : entry.node.name
-      const nodeGraphic = createNode(label, isDir, isCollapsed, () => {
+      const isSelected = !!selectedFilePath && entry.node.path === selectedFilePath
+      const nodeGraphic = createNode(label, isDir, isCollapsed, isSelected, () => {
         if (!isDir) return
         userToggledRef.current = true
         setCollapsedDirs((prev) => {
@@ -406,7 +454,7 @@ export default function LogicView({ projectTree }: LogicViewProps) {
 
     links.stroke({ color: nodeStyle.linkColor, width: 2, alpha: 0.85 })
     root.addChildAt(links, 0)
-  }, [projectTree, isReady, collapsedDirs, theme])
+  }, [projectTree, isReady, collapsedDirs, theme, selectedFilePath])
 
   return <div className="logic-canvas" ref={hostRef} />
 }

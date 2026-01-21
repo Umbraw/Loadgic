@@ -389,7 +389,10 @@ function App() {
 
         <div className={`content${activeView === 'logic' ? ' logic-view' : ''}`}>
           {activeView === 'logic' ? (
-            <LogicView projectTree={projectTree} />
+            <LogicView
+              projectTree={projectTree}
+              selectedFilePath={selectedFilePath}
+            />
           ) : activeView === 'files' && selectedFilePath ? (
             <div className="file-viewer">
               <div className="file-viewer-header">
