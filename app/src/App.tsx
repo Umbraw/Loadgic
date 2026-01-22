@@ -40,6 +40,9 @@ function App() {
   const isInspectorOpenRef = useRef(isInspectorOpen)
   const lastInspectorWidthRef = useRef(inspectorWidth)
   const loadingDirsRef = useRef<Set<string>>(new Set())
+  const [expandedTreeDirs, setExpandedTreeDirs] = useState<Set<string>>(
+    () => new Set()
+  )
   const fullTreeLoadedRef = useRef<string | null>(null)
   const fullTreeLoadingRef = useRef(false)
 
@@ -229,6 +232,7 @@ function App() {
     if (!result) return
     setProjectRoot(result.rootPath)
     setProjectTree(result.tree)
+    setExpandedTreeDirs(new Set([result.rootPath]))
     setSelectedFilePath(null)
     setSelectedFileContent(null)
     fullTreeLoadedRef.current = null
@@ -294,6 +298,32 @@ function App() {
     setSelectedFilePath(filePath)
     const result = await window.loadgic?.readFile?.(filePath)
     setSelectedFileContent(result ?? null)
+    if (projectTree) {
+      const pathStack: string[] = []
+
+      function walk(node: ProjectNode, target: string): boolean {
+        if (node.path === target) {
+          pathStack.push(node.path)
+          return true
+        }
+        if (node.type !== 'dir' || !node.children) return false
+        for (const child of node.children) {
+          if (walk(child, target)) {
+            pathStack.push(node.path)
+            return true
+          }
+        }
+        return false
+      }
+
+      if (walk(projectTree, filePath)) {
+        setExpandedTreeDirs((prev) => {
+          const next = new Set(prev)
+          pathStack.forEach((dirPath) => next.add(dirPath))
+          return next
+        })
+      }
+    }
   }
 
   // Copy file path to clipboard
@@ -378,6 +408,18 @@ function App() {
           onOpenProject={openProject}
           onSelectFile={handleSelectFile}
           onLoadDir={loadDirectory}
+          expandedDirs={expandedTreeDirs}
+          onToggleDir={(dirPath) => {
+            setExpandedTreeDirs((prev) => {
+              const next = new Set(prev)
+              if (next.has(dirPath)) {
+                next.delete(dirPath)
+              } else {
+                next.add(dirPath)
+              }
+              return next
+            })
+          }}
           selectedFilePath={selectedFilePath}
         />
         <div
