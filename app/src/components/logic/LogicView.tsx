@@ -7,10 +7,15 @@ import { useTheme } from '../../theme/ThemeProvider'
 type LogicViewProps = {
   projectTree: ProjectNode | null
   selectedFilePath?: string | null
+  onSelectFilePath?: (filePath: string) => void
 }
 
 // Main LogicView component
-export default function LogicView({ projectTree, selectedFilePath }: LogicViewProps) {
+export default function LogicView({
+  projectTree,
+  selectedFilePath,
+  onSelectFilePath,
+}: LogicViewProps) {
   const { logicSettings, theme } = useTheme()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const appRef = useRef<Application | null>(null)
@@ -275,6 +280,7 @@ export default function LogicView({ projectTree, selectedFilePath }: LogicViewPr
       isDir: boolean,
       isCollapsed: boolean,
       isSelected: boolean,
+      filePath?: string,
       onToggle?: () => void
     ) {
       const container = new Container()
@@ -364,6 +370,12 @@ export default function LogicView({ projectTree, selectedFilePath }: LogicViewPr
         container.on('pointertap', onToggle)
       }
 
+      if (!isDir && filePath && onSelectFilePath) {
+        container.eventMode = 'static'
+        container.cursor = 'pointer'
+        container.on('pointertap', () => onSelectFilePath(filePath))
+      }
+
       container.addChild(box, innerStroke, accentBar, badge, badgeText, text)
       if (toggleGlyph) container.addChild(toggleGlyph)
       return container
@@ -419,7 +431,13 @@ export default function LogicView({ projectTree, selectedFilePath }: LogicViewPr
       const isCollapsed = isDir && collapsedDirs.has(entry.node.path)
       const label = isDir ? `${entry.node.name}/` : entry.node.name
       const isSelected = !!selectedFilePath && entry.node.path === selectedFilePath
-      const nodeGraphic = createNode(label, isDir, isCollapsed, isSelected, () => {
+      const nodeGraphic = createNode(
+        label,
+        isDir,
+        isCollapsed,
+        isSelected,
+        entry.node.path,
+        () => {
         if (!isDir) return
         userToggledRef.current = true
         setCollapsedDirs((prev) => {
@@ -431,7 +449,8 @@ export default function LogicView({ projectTree, selectedFilePath }: LogicViewPr
           }
           return next
         })
-      })
+      }
+      )
       nodeGraphic.position.set(entry.x, entry.y)
       root.addChild(nodeGraphic)
     })

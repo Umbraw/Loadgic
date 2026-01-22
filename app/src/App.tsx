@@ -392,6 +392,7 @@ function App() {
             <LogicView
               projectTree={projectTree}
               selectedFilePath={selectedFilePath}
+              onSelectFilePath={handleSelectFile}
             />
           ) : activeView === 'files' && selectedFilePath ? (
             <div className="file-viewer">
