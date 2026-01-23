@@ -1,5 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
-import { Application, Container, Graphics, Rectangle, Text, TextStyle } from 'pixi.js'
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react'
+import {
+  Application,
+  Container,
+  Graphics,
+  Point,
+  Rectangle,
+  Text,
+  TextStyle,
+} from 'pixi.js'
 import type { ProjectNode } from '../../types/project'
 import { useTheme } from '../../theme/ThemeProvider'
 
@@ -11,13 +25,16 @@ type LogicViewProps = {
   revealKey?: number
 }
 
+export type LogicViewHandle = {
+  hitTestFile: (clientX: number, clientY: number) => string | null
+  isCanvasTarget: (target: EventTarget | null) => boolean
+}
+
 // Main LogicView component
-export default function LogicView({
-  projectTree,
-  selectedFilePath,
-  onSelectFilePath,
-  revealKey = 0,
-}: LogicViewProps) {
+const LogicView = forwardRef<LogicViewHandle, LogicViewProps>(function LogicView(
+  { projectTree, selectedFilePath, onSelectFilePath, revealKey = 0 },
+  ref
+) {
   const { logicSettings, theme } = useTheme()
   const hostRef = useRef<HTMLDivElement | null>(null)
   const appRef = useRef<Application | null>(null)
@@ -30,6 +47,10 @@ export default function LogicView({
   const lastRevealKeyRef = useRef(0)
   const [isReady, setIsReady] = useState(false)
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(() => new Set())
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const fileNodesRef = useRef<
+    { filePath: string; bounds: { x: number; y: number; width: number; height: number } }[]
+  >([])
   const interactionRef = useRef({
     dragging: false,
     lastX: 0,
@@ -60,6 +81,7 @@ export default function LogicView({
       }
 
       const canvas = app.canvas
+      canvasRef.current = canvas
       const themeColor = theme === 'light' ? '#f8fafc' : '#0f1115'
       canvas.style.background = themeColor
       hostRef.current.appendChild(canvas)
@@ -158,6 +180,34 @@ export default function LogicView({
       setIsReady(false)
     }
   }, [])
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      hitTestFile(clientX, clientY) {
+        const app = appRef.current
+        const canvas = canvasRef.current
+        if (!app || !canvas) return null
+        const worldPoint = new Point()
+        app.renderer.events?.mapPositionToPoint(worldPoint, clientX, clientY)
+        const hit = fileNodesRef.current.find((node) => {
+          const { x, y, width, height } = node.bounds
+          return (
+            worldPoint.x >= x &&
+            worldPoint.x <= x + width &&
+            worldPoint.y >= y &&
+            worldPoint.y <= y + height
+          )
+        })
+        return hit ? hit.filePath : null
+      },
+      isCanvasTarget(target) {
+        if (!target || !hostRef.current) return false
+        return target instanceof Node && hostRef.current.contains(target)
+      },
+    }),
+    []
+  )
 
   // Update background color on theme change
   useEffect(() => {
@@ -395,7 +445,11 @@ export default function LogicView({
       if (isDir && onToggle) {
         container.eventMode = 'static'
         container.cursor = 'pointer'
-        container.on('pointertap', onToggle)
+        container.on('pointerdown', (event: any) => {
+          const original = event?.data?.originalEvent as MouseEvent | undefined
+          if (!original || original.button !== 0) return
+          onToggle()
+        })
       }
 
       if (!isDir && filePath) {
@@ -403,7 +457,11 @@ export default function LogicView({
         container.cursor = 'pointer'
         container.hitArea = new Rectangle(0, 0, nodeStyle.width, nodeStyle.height)
         if (onSelectFilePath) {
-          container.on('pointertap', () => onSelectFilePath(filePath))
+          container.on('pointerdown', (event: any) => {
+            const original = event?.data?.originalEvent as MouseEvent | undefined
+            if (!original || original.button !== 0) return
+            onSelectFilePath(filePath)
+          })
         }
       }
 
@@ -457,6 +515,7 @@ export default function LogicView({
     const links = new Graphics()
 
     // Create node graphics and position them
+    fileNodesRef.current = []
     nodes.forEach((entry) => {
       const isDir = entry.node.type === 'dir'
       const isCollapsed = isDir && collapsedDirs.has(entry.node.path)
@@ -484,6 +543,13 @@ export default function LogicView({
       )
       nodeGraphic.position.set(entry.x, entry.y)
       root.addChild(nodeGraphic)
+      if (!isDir) {
+        const bounds = nodeGraphic.getBounds()
+        fileNodesRef.current.push({
+          filePath: entry.node.path,
+          bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
+        })
+      }
     })
 
     // Create links between nodes
@@ -507,4 +573,6 @@ export default function LogicView({
   }, [projectTree, isReady, collapsedDirs, theme, selectedFilePath])
 
   return <div className="logic-canvas" ref={hostRef} />
-}
+})
+
+export default LogicView

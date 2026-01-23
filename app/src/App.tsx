@@ -7,6 +7,7 @@ import type { FileContent } from './types/file'
 import appLogo from './assets/logo/logo_512_512.png'
 import FileViewer from './components/files/FileViewer'
 import LogicView from './components/logic/LogicView'
+import type { LogicViewHandle } from './components/logic/LogicView'
 import InspectorPanel from './components/inspector/InspectorPanel'
 
 const SIDEBAR_WIDTH = 54
@@ -31,7 +32,14 @@ function App() {
   const [settingsMenu, setSettingsMenu] = useState<{ x: number; y: number } | null>(
     null
   )
+  const [contextMenu, setContextMenu] = useState<{
+    x: number
+    y: number
+    items: { label: string; action: () => void }[]
+  } | null>(null)
   const settingsMenuRef = useRef<HTMLDivElement | null>(null)
+  const suppressContextCloseRef = useRef(false)
+  const logicViewRef = useRef<LogicViewHandle | null>(null)
   const isResizingRef = useRef(false)
   const isInspectorResizingRef = useRef(false)
   const panelWidthRef = useRef(panelWidth)
@@ -206,6 +214,115 @@ function App() {
       window.removeEventListener('keydown', handleKey)
     }
   }, [settingsMenu])
+
+  useEffect(() => {
+    if (!contextMenu) return
+    function handleClose() {
+      if (suppressContextCloseRef.current) return
+      setContextMenu(null)
+    }
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setContextMenu(null)
+    }
+    window.addEventListener('click', handleClose)
+    window.addEventListener('contextmenu', handleClose)
+    window.addEventListener('keydown', handleKey)
+    return () => {
+      window.removeEventListener('click', handleClose)
+      window.removeEventListener('contextmenu', handleClose)
+      window.removeEventListener('keydown', handleKey)
+    }
+  }, [contextMenu])
+
+  // Global context menu handler (right-click)
+  useEffect(() => {
+    function handleGlobalContextMenu(event: MouseEvent) {
+      console.log('contextmenu', event.target)
+      const target = event.target as HTMLElement | null
+      if (!target) return
+      setSettingsMenu(null)
+      const openContextMenu = (items: { label: string; action: () => void }[]) => {
+        suppressContextCloseRef.current = true
+        setContextMenu({
+          x: event.clientX,
+          y: event.clientY,
+          items,
+        })
+        window.setTimeout(() => {
+          suppressContextCloseRef.current = false
+        }, 0)
+      }
+
+      // Check if right-clicked on a file in the tree view
+      const treeFile = target.closest('[data-file-path]') as HTMLElement | null
+      if (treeFile) {
+        const filePath = treeFile.dataset.filePath
+        if (filePath) {
+          event.preventDefault()
+          openContextMenu([
+            {
+              label: 'Reveal in file view',
+              action: () => {
+                setActiveView('files')
+                handleSelectFile(filePath)
+              },
+            },
+            {
+              label: 'Reveal in logic view',
+              action: () => {
+                setActiveView('logic')
+                handleSelectFile(filePath)
+              },
+            },
+            {
+              label: 'Copy path',
+              action: () => copyPathToClipboard(filePath),
+            },
+          ])
+          return
+        }
+      }
+
+      // Check if right-clicked on a file node in the logic view
+      const logicHandle = logicViewRef.current
+      if (logicHandle && logicHandle.isCanvasTarget(target)) {
+        const filePath = logicHandle.hitTestFile(event.clientX, event.clientY)
+        if (filePath) {
+          event.preventDefault()
+          openContextMenu([
+            {
+              label: 'Read in file view',
+              action: () => {
+                setActiveView('files')
+                handleSelectFile(filePath)
+              },
+            },
+          ])
+          return
+        }
+      }
+
+      // Check if right-clicked inside code editor
+      if (target.closest('.cm-editor') && selectedFilePath) {
+        event.preventDefault()
+        openContextMenu([
+          {
+            label: 'Copy path',
+            action: () => copyPathToClipboard(selectedFilePath),
+          },
+          {
+            label: 'Reveal in logic view',
+            action: () => setActiveView('logic'),
+          },
+        ])
+      }
+    }
+
+    window.addEventListener('contextmenu', handleGlobalContextMenu, true)
+    return () => {
+      window.removeEventListener('contextmenu', handleGlobalContextMenu, true)
+    }
+  }, [selectedFilePath])
 
   // Ensure settings menu is within viewport
   useLayoutEffect(() => {
@@ -443,6 +560,7 @@ function App() {
               selectedFilePath={selectedFilePath}
               onSelectFilePath={handleSelectFile}
               revealKey={logicRevealKey}
+              ref={logicViewRef}
             />
           ) : activeView === 'files' && selectedFilePath ? (
             <div className="file-viewer">
@@ -570,6 +688,27 @@ function App() {
             <button className="context-menu-item" onClick={handleOpenSettings}>
               Settings
             </button>
+          </div>
+        ) : null}
+        {contextMenu ? (
+          <div
+            className="context-menu"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+            onClick={(event) => event.stopPropagation()}
+            role="menu"
+          >
+            {contextMenu.items.map((item) => (
+              <button
+                key={item.label}
+                className="context-menu-item"
+                onClick={() => {
+                  item.action()
+                  setContextMenu(null)
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
         ) : null}
       </div>
