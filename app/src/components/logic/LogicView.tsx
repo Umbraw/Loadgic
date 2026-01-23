@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Application, Container, Graphics, Text, TextStyle } from 'pixi.js'
+import { Application, Container, Graphics, Rectangle, Text, TextStyle } from 'pixi.js'
 import type { ProjectNode } from '../../types/project'
 import { useTheme } from '../../theme/ThemeProvider'
 
@@ -24,6 +24,7 @@ export default function LogicView({
   const lastRootPathRef = useRef<string | null>(null)
   const collapseInitRef = useRef(false)
   const userToggledRef = useRef(false)
+  const lastSelectionRef = useRef<string | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(() => new Set())
   const interactionRef = useRef({
@@ -67,6 +68,8 @@ export default function LogicView({
       const root = new Container()
       root.position.set(40, 40)
       app.stage.addChild(root)
+      app.stage.eventMode = 'static'
+      app.stage.hitArea = app.renderer.screen
 
       rootRef.current = root
       appRef.current = app
@@ -189,6 +192,8 @@ export default function LogicView({
 
   useEffect(() => {
     if (!selectedFilePath || !projectTree) return
+    if (lastSelectionRef.current === selectedFilePath) return
+    lastSelectionRef.current = selectedFilePath
     const dirPaths = new Set<string>()
 
     function findPath(node: ProjectNode, target: string): boolean {
@@ -213,7 +218,7 @@ export default function LogicView({
         return changed ? next : prev
       })
     }
-  }, [selectedFilePath, projectTree, collapsedDirs])
+  }, [selectedFilePath, projectTree])
 
   // Initialize collapsed dirs based on settings
   useEffect(() => {
@@ -370,10 +375,13 @@ export default function LogicView({
         container.on('pointertap', onToggle)
       }
 
-      if (!isDir && filePath && onSelectFilePath) {
+      if (!isDir && filePath) {
         container.eventMode = 'static'
         container.cursor = 'pointer'
-        container.on('pointertap', () => onSelectFilePath(filePath))
+        container.hitArea = new Rectangle(0, 0, nodeStyle.width, nodeStyle.height)
+        if (onSelectFilePath) {
+          container.on('pointertap', () => onSelectFilePath(filePath))
+        }
       }
 
       container.addChild(box, innerStroke, accentBar, badge, badgeText, text)
