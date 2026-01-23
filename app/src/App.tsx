@@ -21,6 +21,7 @@ function App() {
   const [panelWidth, setPanelWidth] = useState(320)
   const [isInspectorOpen, setIsInspectorOpen] = useState(true)
   const [inspectorWidth, setInspectorWidth] = useState(280)
+  const [logicRevealKey, setLogicRevealKey] = useState(0)
   const [projectRoot, setProjectRoot] = useState<string | null>(null)
   const [projectTree, setProjectTree] = useState<ProjectNode | null>(null)
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
@@ -73,6 +74,12 @@ function App() {
   useEffect(() => {
     isInspectorOpenRef.current = isInspectorOpen
   }, [isInspectorOpen])
+
+  useEffect(() => {
+    if (activeView === 'logic') {
+      setLogicRevealKey((prev) => prev + 1)
+    }
+  }, [activeView])
 
   useEffect(() => {
     function handleMouseMove(event: MouseEvent) {
@@ -435,6 +442,7 @@ function App() {
               projectTree={projectTree}
               selectedFilePath={selectedFilePath}
               onSelectFilePath={handleSelectFile}
+              revealKey={logicRevealKey}
             />
           ) : activeView === 'files' && selectedFilePath ? (
             <div className="file-viewer">

@@ -8,6 +8,7 @@ type LogicViewProps = {
   projectTree: ProjectNode | null
   selectedFilePath?: string | null
   onSelectFilePath?: (filePath: string) => void
+  revealKey?: number
 }
 
 // Main LogicView component
@@ -15,6 +16,7 @@ export default function LogicView({
   projectTree,
   selectedFilePath,
   onSelectFilePath,
+  revealKey = 0,
 }: LogicViewProps) {
   const { logicSettings, theme } = useTheme()
   const hostRef = useRef<HTMLDivElement | null>(null)
@@ -25,6 +27,7 @@ export default function LogicView({
   const collapseInitRef = useRef(false)
   const userToggledRef = useRef(false)
   const lastSelectionRef = useRef<string | null>(null)
+  const lastRevealKeyRef = useRef(0)
   const [isReady, setIsReady] = useState(false)
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(() => new Set())
   const interactionRef = useRef({
@@ -192,8 +195,11 @@ export default function LogicView({
 
   useEffect(() => {
     if (!selectedFilePath || !projectTree) return
-    if (lastSelectionRef.current === selectedFilePath) return
+    const revealChanged = revealKey !== lastRevealKeyRef.current
+    const selectionChanged = lastSelectionRef.current !== selectedFilePath
+    if (!revealChanged && !selectionChanged) return
     lastSelectionRef.current = selectedFilePath
+    lastRevealKeyRef.current = revealKey
     const dirPaths = new Set<string>()
 
     function findPath(node: ProjectNode, target: string): boolean {
@@ -218,7 +224,7 @@ export default function LogicView({
         return changed ? next : prev
       })
     }
-  }, [selectedFilePath, projectTree])
+  }, [selectedFilePath, projectTree, revealKey])
 
   // Initialize collapsed dirs based on settings
   useEffect(() => {
@@ -226,6 +232,7 @@ export default function LogicView({
     const MAX_CHILDREN = logicSettings.maxChildren
     const MAX_DEPTH = logicSettings.maxDepth
     const nextCollapsed = new Set<string>()
+    const revealDirs = new Set<string>()
 
     function walk(node: ProjectNode, level: number) {
       if (node.type === 'dir') {
@@ -236,10 +243,26 @@ export default function LogicView({
       }
     }
 
+    function collectParents(node: ProjectNode, target: string): boolean {
+      if (node.path === target) return true
+      if (node.type !== 'dir' || !node.children) return false
+      for (const child of node.children) {
+        if (collectParents(child, target)) {
+          revealDirs.add(node.path)
+          return true
+        }
+      }
+      return false
+    }
+
     walk(projectTree, 0)
+    if (selectedFilePath) {
+      collectParents(projectTree, selectedFilePath)
+      revealDirs.forEach((dirPath) => nextCollapsed.delete(dirPath))
+    }
     setCollapsedDirs(nextCollapsed)
     collapseInitRef.current = true
-  }, [projectTree, logicSettings])
+  }, [projectTree, logicSettings, selectedFilePath])
 
   // Render logic view
   useEffect(() => {
