@@ -1,7 +1,10 @@
 // Define code outline structure
 export type Outline = {
   imports: string[]
+  importBindings: string[]
+  importSources: string[]
   exports: string[]
+  exportSources: string[]
   functions: string[]
   hooks: string[]
   classes: { name: string; methods: string[] }[]

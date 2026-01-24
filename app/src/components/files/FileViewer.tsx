@@ -17,13 +17,15 @@ import { rust } from '@codemirror/lang-rust'
 import { php } from '@codemirror/lang-php'
 import { sql } from '@codemirror/lang-sql'
 import { useMemo } from 'react'
-import type { Extension } from '@codemirror/state'
+import { RangeSetBuilder, type Extension } from '@codemirror/state'
+import { Decoration, type EditorView, ViewPlugin } from '@codemirror/view'
 import { useTheme } from '../../theme/ThemeProvider'
 
 // Props for FileViewer component
 type Props = {
   content: string
   filePath: string
+  highlightQuery?: string | null
 }
 
 const nord = nordInit({})
@@ -92,8 +94,116 @@ function getLanguageExtension(ext: string) {
   }
 }
 
+function isIdentifierChar(value: string) {
+  return /[A-Za-z0-9_$]/.test(value)
+}
+
+function collectMatches(text: string, query: string) {
+  const matches: { from: number; to: number }[] = []
+  if (!query) return matches
+  let index = 0
+  while (index < text.length) {
+    const next = text.indexOf(query, index)
+    if (next === -1) break
+    const from = next
+    const to = next + query.length
+    const before = from > 0 ? text[from - 1] : ''
+    const after = to < text.length ? text[to] : ''
+    if (isIdentifierChar(before) || isIdentifierChar(after)) {
+      index = to
+      continue
+    }
+    matches.push({ from, to })
+    index = to
+  }
+  return matches
+}
+
+function buildHighlightDecorations(view: EditorView, query: string) {
+  const builder = new RangeSetBuilder<Decoration>()
+  if (!query) return builder.finish()
+  const matches = collectMatches(view.state.doc.toString(), query)
+  matches.forEach(({ from, to }) => {
+    builder.add(from, to, Decoration.mark({ class: 'cm-inspector-highlight' }))
+  })
+  return builder.finish()
+}
+
+function createHighlightExtension(query: string) {
+  if (!query.trim()) return []
+  return ViewPlugin.fromClass(
+    class {
+      decorations
+      constructor(view: EditorView) {
+        this.decorations = buildHighlightDecorations(view, query)
+      }
+      update(update: { view: EditorView; docChanged: boolean }) {
+        if (update.docChanged) {
+          this.decorations = buildHighlightDecorations(update.view, query)
+        }
+      }
+    },
+    {
+      decorations: (plugin) => plugin.decorations,
+    }
+  )
+}
+
+function createMarkersExtension(query: string) {
+  if (!query.trim()) return []
+  return ViewPlugin.fromClass(
+    class {
+      markers: HTMLDivElement
+      constructor(view: EditorView) {
+        this.markers = document.createElement('div')
+        this.markers.className = 'cm-inspector-markers'
+        view.dom.parentElement?.appendChild(this.markers)
+        this.updateMarkers(view)
+      }
+      update(update: {
+        view: EditorView
+        docChanged: boolean
+        geometryChanged: boolean
+      }) {
+        if (update.docChanged || update.geometryChanged) {
+          this.updateMarkers(update.view)
+        }
+      }
+      updateMarkers(view: EditorView) {
+        const text = view.state.doc.toString()
+        const matches = collectMatches(text, query)
+        const scrollRect = view.scrollDOM.getBoundingClientRect()
+        const parent = this.markers.offsetParent as HTMLElement | null
+        const parentRect = parent ? parent.getBoundingClientRect() : scrollRect
+        const trackHeight = scrollRect.height
+        const topOffset = scrollRect.top - parentRect.top
+        const contentHeight = view.contentHeight || 1
+        this.markers.style.height = `${trackHeight}px`
+        this.markers.style.top = `${topOffset}px`
+        this.markers.innerHTML = ''
+        matches.forEach(({ from }) => {
+          const lineTop = view.lineBlockAt(from).top
+          const ratio = contentHeight <= 1 ? 0 : lineTop / contentHeight
+          const marker = document.createElement('div')
+          marker.className = 'cm-inspector-marker'
+          marker.style.top = `${Math.round(ratio * trackHeight) + 16}px`
+          this.markers.appendChild(marker)
+        })
+      }
+      destroy() {
+        this.markers.remove()
+      }
+    }
+  )
+}
+
+function createInspectorExtensions(query: string) {
+  if (!query.trim()) return []
+  return [createHighlightExtension(query), createMarkersExtension(query)]
+}
+
 // Main FileViewer component
-export default function FileViewer({ content, filePath }: Props) {
+export default function FileViewer({ content, filePath, highlightQuery }: Props) {
   const { theme, editorTheme } = useTheme()
   const extensions = useMemo(() => {
     const ext = getExtension(filePath)
@@ -101,11 +211,16 @@ export default function FileViewer({ content, filePath }: Props) {
     return Array.isArray(lang) ? [] : [lang]
   }, [filePath])
 
+  const highlightExtension = useMemo(
+    () => (highlightQuery ? createInspectorExtensions(highlightQuery) : []),
+    [highlightQuery]
+  )
+
   return (
     <CodeMirror
       value={content}
       theme={getEditorTheme(editorTheme, theme === 'dark')}
-      extensions={extensions}
+      extensions={[...extensions, highlightExtension]}
       readOnly
       editable={false}
       basicSetup={{

@@ -332,6 +332,38 @@ body {
   color: var(--text);
 }
 
+.inspector-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.inspector-chip {
+  cursor: pointer;
+}
+
+button.inspector-chip:hover,
+.inspector-link:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.inspector-link:focus-visible {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.inspector-method {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .inspector-count {
   font-size: 11px;
   color: var(--text);
@@ -792,6 +824,31 @@ body {
   background: var(--hover);
 }
 
+.cm-inspector-highlight {
+  background: var(--inspector-highlight);
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(249, 168, 37, 0.5);
+  padding: 0 1px;
+  box-decoration-break: clone;
+}
+
+.cm-inspector-markers {
+  position: absolute;
+  right: -10px;
+  width: 6px;
+  pointer-events: none;
+}
+
+.cm-inspector-marker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(249, 168, 37, 0.9);
+  box-shadow: 0 0 6px rgba(249, 168, 37, 0.45);
+}
+
 /* =========================
    THEME OVERRIDES
 ========================= */
@@ -805,6 +862,7 @@ body {
   --border-strong: #2a3440;
   --hover: #1f2933;
   --accent: #dc2626;
+  --inspector-highlight: rgba(249, 168, 37, 0.5);
 }
 
 [data-theme='light'] {
@@ -817,6 +875,7 @@ body {
   --border-strong: #7f8a9a;
   --hover: #e2e8f0;
   --accent: #dc2626;
+  --inspector-highlight: rgba(249, 168, 37, 0.55);
 }
 
 body,
@@ -963,6 +1022,7 @@ body,
   display: flex;
   flex-direction: column;
   gap: 8px;
+  position: relative;
 }
 
 .file-viewer-header {
@@ -1055,6 +1115,7 @@ body,
   border: 1px solid #1f2933;
   border-radius: 8px;
   background: #0b0d11;
+  position: relative;
 }
 
 .image-viewer {
@@ -1080,6 +1141,7 @@ body,
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
     'Courier New', monospace;
   font-size: 12px;
+  line-height: 1.6;
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
   background: #0b0d11;

@@ -28,7 +28,10 @@ function getPluginsForPath(filePath: string) {
 
 export function analyzeJsTs(content: string, filePath: string): Outline {
   const imports: string[] = []
+  const importSources: string[] = []
+  const importBindings: string[] = []
   const exports: string[] = []
+  const exportSources: string[] = []
   const functions: string[] = []
   const hooks: string[] = []
   const classes: { name: string; methods: string[] }[] = []
@@ -49,7 +52,10 @@ export function analyzeJsTs(content: string, filePath: string): Outline {
   } catch {
     return {
       imports,
+      importBindings,
+      importSources,
       exports,
+      exportSources,
       functions,
       hooks,
       classes,
@@ -62,9 +68,19 @@ export function analyzeJsTs(content: string, filePath: string): Outline {
 
   traverse(ast, {
     ImportDeclaration(path) {
-      imports.push(path.node.source.value)
+      const source = path.node.source.value
+      imports.push(source)
+      importSources.push(source)
+      path.node.specifiers.forEach((spec) => {
+        if (spec.local && spec.local.type === 'Identifier') {
+          importBindings.push(spec.local.name)
+        }
+      })
     },
     ExportNamedDeclaration(path) {
+      if (path.node.source) {
+        exportSources.push(path.node.source.value)
+      }
       if (path.node.declaration) {
         const decl = path.node.declaration
         if (decl.type === 'FunctionDeclaration' && decl.id) {
@@ -94,6 +110,9 @@ export function analyzeJsTs(content: string, filePath: string): Outline {
       } else {
         exports.push('default')
       }
+    },
+    ExportAllDeclaration(path) {
+      exportSources.push(path.node.source.value)
     },
     FunctionDeclaration(path) {
       if (!path.node.id) return
@@ -134,11 +153,35 @@ export function analyzeJsTs(content: string, filePath: string): Outline {
     TSEnumDeclaration(path) {
       enums.push(path.node.id.name)
     },
+    CallExpression(path) {
+      if (path.node.callee.type !== 'Identifier') return
+      if (path.node.callee.name !== 'require') return
+      const arg = path.node.arguments[0]
+      if (!arg || arg.type !== 'StringLiteral') return
+      imports.push(arg.value)
+      importSources.push(arg.value)
+    },
+    Import(path) {
+      const parent = path.parent
+      if (
+        parent &&
+        parent.type === 'CallExpression' &&
+        parent.arguments[0] &&
+        parent.arguments[0].type === 'StringLiteral'
+      ) {
+        const source = parent.arguments[0].value
+        imports.push(source)
+        importSources.push(source)
+      }
+    },
   })
 
   return {
     imports: unique(imports),
+    importBindings: unique(importBindings),
+    importSources: unique(importSources),
     exports: unique(exports),
+    exportSources: unique(exportSources),
     functions: unique(functions),
     hooks: unique(hooks),
     classes: classes

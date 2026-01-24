@@ -37,6 +37,7 @@ function App() {
     y: number
     items: { label: string; action: () => void }[]
   } | null>(null)
+  const [highlightQuery, setHighlightQuery] = useState<string | null>(null)
   const settingsMenuRef = useRef<HTMLDivElement | null>(null)
   const suppressContextCloseRef = useRef(false)
   const logicViewRef = useRef<LogicViewHandle | null>(null)
@@ -215,6 +216,7 @@ function App() {
     }
   }, [settingsMenu])
 
+  // Handle context menu close on outside click or Escape key
   useEffect(() => {
     if (!contextMenu) return
     function handleClose() {
@@ -419,6 +421,7 @@ function App() {
 
   // Handle file selection
   async function handleSelectFile(filePath: string) {
+    setHighlightQuery(null)
     setSelectedFilePath(filePath)
     const result = await window.loadgic?.readFile?.(filePath)
     setSelectedFileContent(result ?? null)
@@ -448,6 +451,18 @@ function App() {
         })
       }
     }
+  }
+
+  function handleRevealSymbol(symbol: string) {
+    if (
+      !selectedFilePath ||
+      !selectedFileContent ||
+      selectedFileContent.kind !== 'text'
+    ) {
+      return
+    }
+    setHighlightQuery(symbol)
+    setActiveView('files')
   }
 
   // Copy file path to clipboard
@@ -592,6 +607,7 @@ function App() {
                   <FileViewer
                     content={selectedFileContent.content}
                     filePath={selectedFilePath}
+                    highlightQuery={highlightQuery}
                   />
                 ) : selectedFileContent.kind === 'image' ? (
                   <div className="image-viewer">
@@ -667,6 +683,7 @@ function App() {
           <InspectorPanel
             filePath={selectedFilePath}
             fileContent={selectedFileContent}
+            onRevealSymbol={handleRevealSymbol}
           />
         </aside>
         {isInspectorOpen ? (

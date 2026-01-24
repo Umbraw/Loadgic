@@ -6,15 +6,18 @@ import type { Outline } from '../../analyzers/types'
 type Props = {
   filePath: string | null
   fileContent: FileContent | null
+  onRevealSymbol?: (symbol: string) => void
 }
 
 // Section component displaying categorized items
 function Section({
   title,
   items,
+  onSelectItem,
 }: {
   title: string
   items: string[] | { name: string; methods: string[] }[]
+  onSelectItem?: (value: string) => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
   return (
@@ -39,15 +42,51 @@ function Section({
         <div className="inspector-list">
           {items.map((item) =>
             typeof item === 'string' ? (
-              <span key={item} className="inspector-chip">
-                {item}
-              </span>
+              onSelectItem ? (
+                <button
+                  key={item}
+                  className="inspector-chip"
+                  type="button"
+                  onClick={() => onSelectItem(item)}
+                >
+                  {item}
+                </button>
+              ) : (
+                <span key={item} className="inspector-chip">
+                  {item}
+                </span>
+              )
             ) : (
               <div key={item.name} className="inspector-item">
-                <div className="inspector-item-title">{item.name}</div>
+                {onSelectItem ? (
+                  <button
+                    className="inspector-item-title inspector-link"
+                    type="button"
+                    onClick={() => onSelectItem(item.name)}
+                  >
+                    {item.name}
+                  </button>
+                ) : (
+                  <div className="inspector-item-title">{item.name}</div>
+                )}
                 {item.methods.length > 0 ? (
                   <div className="inspector-item-sub">
-                    {item.methods.join(', ')}
+                    {item.methods.map((method, index) => (
+                      <span key={method}>
+                        {onSelectItem ? (
+                          <button
+                            className="inspector-method inspector-link"
+                            type="button"
+                            onClick={() => onSelectItem(method)}
+                          >
+                            {method}
+                          </button>
+                        ) : (
+                          <span className="inspector-method">{method}</span>
+                        )}
+                        {index < item.methods.length - 1 ? ', ' : ''}
+                      </span>
+                    ))}
                   </div>
                 ) : null}
               </div>
@@ -60,7 +99,11 @@ function Section({
 }
 
 // InspectorPanel component displaying file analysis
-export default function InspectorPanel({ filePath, fileContent }: Props) {
+export default function InspectorPanel({
+  filePath,
+  fileContent,
+  onRevealSymbol,
+}: Props) {
   const workerRef = useRef<Worker | null>(null)
   const requestIdRef = useRef(0)
   const [outline, setOutline] = useState<Outline | null>(null)
@@ -135,12 +178,18 @@ export default function InspectorPanel({ filePath, fileContent }: Props) {
         <div className="inspector-summary-title">Summary</div>
         <div className="inspector-summary-grid">
           <div>
-            <div className="inspector-summary-value">{outline.imports.length}</div>
-            <div className="inspector-summary-label">Imports</div>
+            <div className="inspector-summary-value">{outline.importSources.length}</div>
+            <div className="inspector-summary-label">Import sources</div>
           </div>
           <div>
             <div className="inspector-summary-value">{outline.exports.length}</div>
             <div className="inspector-summary-label">Exports</div>
+          </div>
+          <div>
+            <div className="inspector-summary-value">
+              {outline.importBindings.length}
+            </div>
+            <div className="inspector-summary-label">Imported symbols</div>
           </div>
           <div>
             <div className="inspector-summary-value">{outline.classes.length}</div>
@@ -170,17 +219,41 @@ export default function InspectorPanel({ filePath, fileContent }: Props) {
             <div className="inspector-summary-value">{outline.variables.length}</div>
             <div className="inspector-summary-label">Variables</div>
           </div>
+          <div>
+            <div className="inspector-summary-value">
+              {outline.exportSources.length}
+            </div>
+            <div className="inspector-summary-label">Export sources</div>
+          </div>
         </div>
       </div>
-      <Section title="Imports" items={outline.imports} />
-      <Section title="Exports" items={outline.exports} />
-      <Section title="Classes" items={outline.classes} />
-      <Section title="Functions" items={outline.functions} />
-      <Section title="Hooks" items={outline.hooks} />
-      <Section title="Interfaces" items={outline.interfaces} />
-      <Section title="Types" items={outline.types} />
-      <Section title="Enums" items={outline.enums} />
-      <Section title="Variables" items={outline.variables} />
+      <Section
+        title="Import sources"
+        items={outline.importSources}
+        onSelectItem={onRevealSymbol}
+      />
+      <Section
+        title="Imported symbols"
+        items={outline.importBindings}
+        onSelectItem={onRevealSymbol}
+      />
+      <Section title="Exports" items={outline.exports} onSelectItem={onRevealSymbol} />
+      <Section
+        title="Export sources"
+        items={outline.exportSources}
+        onSelectItem={onRevealSymbol}
+      />
+      <Section title="Classes" items={outline.classes} onSelectItem={onRevealSymbol} />
+      <Section title="Functions" items={outline.functions} onSelectItem={onRevealSymbol} />
+      <Section title="Hooks" items={outline.hooks} onSelectItem={onRevealSymbol} />
+      <Section
+        title="Interfaces"
+        items={outline.interfaces}
+        onSelectItem={onRevealSymbol}
+      />
+      <Section title="Types" items={outline.types} onSelectItem={onRevealSymbol} />
+      <Section title="Enums" items={outline.enums} onSelectItem={onRevealSymbol} />
+      <Section title="Variables" items={outline.variables} onSelectItem={onRevealSymbol} />
     </div>
   )
 }
