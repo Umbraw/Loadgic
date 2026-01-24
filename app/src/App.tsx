@@ -12,7 +12,7 @@ import InspectorPanel from './components/inspector/InspectorPanel'
 
 const SIDEBAR_WIDTH = 54
 const MIN_PANEL_WIDTH = 220
-const MIN_INSPECTOR_WIDTH = 220
+const MIN_INSPECTOR_WIDTH = 265
 const COLLAPSE_THRESHOLD = 140
 const MIN_CONTENT_WIDTH = 200
 
@@ -38,6 +38,7 @@ function App() {
     items: { label: string; action: () => void }[]
   } | null>(null)
   const [highlightQuery, setHighlightQuery] = useState<string | null>(null)
+  const [inspectorSearch, setInspectorSearch] = useState('')
   const settingsMenuRef = useRef<HTMLDivElement | null>(null)
   const suppressContextCloseRef = useRef(false)
   const logicViewRef = useRef<LogicViewHandle | null>(null)
@@ -422,6 +423,7 @@ function App() {
   // Handle file selection
   async function handleSelectFile(filePath: string) {
     setHighlightQuery(null)
+    setInspectorSearch('')
     setSelectedFilePath(filePath)
     const result = await window.loadgic?.readFile?.(filePath)
     setSelectedFileContent(result ?? null)
@@ -462,6 +464,7 @@ function App() {
       return
     }
     setHighlightQuery(symbol)
+    setInspectorSearch(symbol)
     setActiveView('files')
   }
 
@@ -669,6 +672,17 @@ function App() {
         <aside className="inspector">
           <div className="inspector-header">
             <span>INSPECTOR</span>
+            <input
+              className="inspector-search"
+              type="search"
+              placeholder="Search in file"
+              value={inspectorSearch}
+              onChange={(event) => {
+                const value = event.target.value
+                setInspectorSearch(value)
+                setHighlightQuery(value.trim() ? value : null)
+              }}
+            />
             <button
               className="inspector-toggle"
               onClick={() => setIsInspectorOpen(false)}

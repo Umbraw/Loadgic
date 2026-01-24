@@ -232,9 +232,10 @@ body {
   font-weight: 600;
   color: #f59e7b;
   letter-spacing: 0.04em;
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   min-height: 40px;
 }
 
@@ -505,6 +506,27 @@ button.inspector-chip:hover,
 .inspector-toggle-icon {
   font-size: 12px;
   line-height: 1;
+}
+
+.inspector-search {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.inspector-search::placeholder {
+  color: var(--text-muted);
+}
+
+.inspector-search:focus {
+  outline: 2px solid var(--border-strong);
+  outline-offset: 1px;
 }
 
 .sidepanel-body {
