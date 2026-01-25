@@ -16,8 +16,8 @@ import { java } from '@codemirror/lang-java'
 import { rust } from '@codemirror/lang-rust'
 import { php } from '@codemirror/lang-php'
 import { sql } from '@codemirror/lang-sql'
-import { useMemo } from 'react'
-import { RangeSetBuilder, type Extension } from '@codemirror/state'
+import { useEffect, useMemo, useState } from 'react'
+import { RangeSetBuilder, type Extension, type Text } from '@codemirror/state'
 import { Decoration, type EditorView, ViewPlugin } from '@codemirror/view'
 import { useTheme } from '../../theme/ThemeProvider'
 
@@ -26,6 +26,7 @@ type Props = {
   content: string
   filePath: string
   highlightQuery?: string | null
+  onSymbolSelect?: (symbol: string) => void
 }
 
 const nord = nordInit({})
@@ -98,6 +99,11 @@ function isIdentifierChar(value: string) {
   return /[A-Za-z0-9_$]/.test(value)
 }
 
+function isSymbolChar(value: string) {
+  if (!value) return false
+  return value === '-' || isIdentifierChar(value)
+}
+
 function collectMatches(text: string, query: string) {
   const matches: { from: number; to: number }[] = []
   if (!query) return matches
@@ -117,6 +123,28 @@ function collectMatches(text: string, query: string) {
     index = to
   }
   return matches
+}
+
+function getSymbolAtPosition(doc: Text, pos: number) {
+  let start = pos
+  let end = pos
+  while (start > 0) {
+    const char = doc.sliceString(start - 1, start)
+    if (!isSymbolChar(char)) break
+    start -= 1
+  }
+  const length = doc.length
+  while (end < length) {
+    const char = doc.sliceString(end, end + 1)
+    if (!isSymbolChar(char)) break
+    end += 1
+  }
+  if (start === end) return null
+  const symbol = doc.sliceString(start, end)
+  if (!symbol.replace(/-/g, '').length) {
+    return null
+  }
+  return symbol
 }
 
 function buildHighlightDecorations(view: EditorView, query: string) {
@@ -203,7 +231,12 @@ function createInspectorExtensions(query: string) {
 }
 
 // Main FileViewer component
-export default function FileViewer({ content, filePath, highlightQuery }: Props) {
+export default function FileViewer({
+  content,
+  filePath,
+  highlightQuery,
+  onSymbolSelect,
+}: Props) {
   const { theme, editorTheme } = useTheme()
   const extensions = useMemo(() => {
     const ext = getExtension(filePath)
@@ -211,10 +244,53 @@ export default function FileViewer({ content, filePath, highlightQuery }: Props)
     return Array.isArray(lang) ? [] : [lang]
   }, [filePath])
 
+  const [editorView, setEditorView] = useState<EditorView | null>(null)
+
   const highlightExtension = useMemo(
     () => (highlightQuery ? createInspectorExtensions(highlightQuery) : []),
     [highlightQuery]
   )
+
+  useEffect(() => {
+    if (!editorView || !onSymbolSelect) return
+
+    function handleModifierClick(event: MouseEvent) {
+      const isModifierPressed = event.ctrlKey || event.metaKey
+      if (!isModifierPressed || event.button !== 0) return
+      const pos = editorView.posAtCoords({
+        x: event.clientX,
+        y: event.clientY,
+      })
+      if (pos == null) return
+      const { state } = editorView
+      const selection = state.selection
+      for (const range of selection.ranges) {
+        if (
+          !range.empty &&
+          pos >= range.from &&
+          pos <= range.to &&
+          range.to <= state.doc.length
+        ) {
+          const selectedText = state.sliceDoc(range.from, range.to).trim()
+          if (selectedText.length) {
+            event.preventDefault()
+            onSymbolSelect(selectedText)
+            return
+          }
+        }
+      }
+      const symbol = getSymbolAtPosition(editorView.state.doc, pos)
+      if (!symbol) return
+      event.preventDefault()
+      onSymbolSelect(symbol)
+    }
+
+    const dom = editorView.dom
+    dom.addEventListener('mousedown', handleModifierClick)
+    return () => {
+      dom.removeEventListener('mousedown', handleModifierClick)
+    }
+  }, [editorView, onSymbolSelect])
 
   return (
     <CodeMirror
@@ -228,6 +304,9 @@ export default function FileViewer({ content, filePath, highlightQuery }: Props)
         foldGutter: false,
         highlightActiveLine: false,
         highlightActiveLineGutter: false,
+      }}
+      onCreateEditor={(view) => {
+        setEditorView(view)
       }}
     />
   )

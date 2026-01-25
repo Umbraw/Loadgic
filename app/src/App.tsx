@@ -611,6 +611,7 @@ function App() {
                     content={selectedFileContent.content}
                     filePath={selectedFilePath}
                     highlightQuery={highlightQuery}
+                    onSymbolSelect={handleRevealSymbol}
                   />
                 ) : selectedFileContent.kind === 'image' ? (
                   <div className="image-viewer">
