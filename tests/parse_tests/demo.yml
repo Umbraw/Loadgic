@@ -1,0 +1,16 @@
+name: Loadgic
+version: 1.0
+features:
+  - analyze
+  - visualize
+metadata:
+  owner: umbraw
+  active: true
+  tags:
+    - code
+    - graph
+services:
+  web:
+    port: 5173
+    env:
+      MODE: dev

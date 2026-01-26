@@ -29,7 +29,7 @@ This project is built with:
 * Electron  
 * CodeMirror 6 (file viewer)  
 * PixiJS  
-* Babel (parser/traverse for TS/JS structural analysis)  
+* Tree-sitter (multi-language structural analysis)  
 
 ---
 
@@ -38,7 +38,8 @@ This project is built with:
 * Project folder import and tree explorer  
 * File viewer with syntax highlighting (CodeMirror)  
 * Binary files are detected and skipped in the viewer  
-* Inspector: structural analysis of selected TS/JS files  
+* Inspector: structural analysis for multiple languages (JS/TS, Python, Go, Rust, Java, C/C++, C#, PHP, Ruby, JSON, YAML)  
+* Markdown/YAML overview (text-based fallback without WASM)  
 
 ---
 
@@ -61,6 +62,9 @@ npm install
 ````
 
 This installs all dependencies required for development.
+It also prepares Tree-sitter WASM files automatically (core + optional pack).
+
+> Note: Markdown overview works without WASM. Other languages rely on Tree-sitter WASM.
 
 ---
 
@@ -86,6 +90,24 @@ npm run dev:wayland
 
 This launches the app with hot-reload (recommended while coding).
 Changes in the code will automatically refresh the application.
+
+---
+
+## Analyzer System
+
+Loadgic uses **Tree-sitter** for multi-language parsing.  
+WASM files are copied to `app/public/treesitter/` on install/build.
+
+**Core pack (enabled by default):**
+- JavaScript, JSX, TypeScript, TSX
+- Python
+- JSON
+- YAML
+
+**Optional pack (toggle in Settings):**
+- Go, Rust, Java, C, C++, C#, PHP, Ruby
+
+Markdown is analyzed with a lightweight text parser (no WASM required).
 
 ---
 
@@ -234,4 +256,3 @@ Licensed under the MIT License. See `LICENSE.md`.
 
 Contributions, ideas, and feedback are welcome!
 Feel free to open issues or pull requests on the GitHub repository.
-

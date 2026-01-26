@@ -1,34 +1,39 @@
-import type { Analyzer, Outline } from './types'
-import { analyzeJsTs } from './jsTsAnalyzer'
+import type { Outline } from './types'
+import { analyzeWithTreeSitter } from './treeSitterAnalyzer'
+import {
+  CORE_LANGUAGE_IDS,
+  getLanguageForFile,
+  type LanguageId,
+} from './languages'
+import { analyzeMarkdownText, analyzeYamlText } from './plainTextAnalyzers'
 
-const JS_TS_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx']
-
-const jsTsAnalyzer: Analyzer = {
-  id: 'js-ts',
-  supportedExtensions: JS_TS_EXTENSIONS,
-  analyze: (content: string) => analyzeJsTs(content, ''),
+export type AnalysisSettings = {
+  engine: 'tree-sitter'
+  enabledLanguages: LanguageId[]
 }
 
-const analyzers: Analyzer[] = [jsTsAnalyzer]
-
-function getExtension(filePath: string) {
-  const match = filePath.toLowerCase().match(/\.([a-z0-9]+)$/)
-  return match ? `.${match[1]}` : ''
+export const DEFAULT_ANALYSIS_SETTINGS: AnalysisSettings = {
+  engine: 'tree-sitter',
+  enabledLanguages: CORE_LANGUAGE_IDS,
 }
 
-export function getAnalyzerForFile(filePath: string): Analyzer | null {
-  const ext = getExtension(filePath)
-  return analyzers.find((a) => a.supportedExtensions.includes(ext)) ?? null
-}
-
-export function analyzeFileContent(
+export async function analyzeFileContent(
   filePath: string,
-  content: string
-): Outline | null {
-  const analyzer = getAnalyzerForFile(filePath)
-  if (!analyzer) return null
-  if (analyzer.id === 'js-ts') {
-    return analyzeJsTs(content, filePath)
+  content: string,
+  settings: AnalysisSettings = DEFAULT_ANALYSIS_SETTINGS
+): Promise<Outline | null> {
+  const languageId = getLanguageForFile(filePath)
+  if (!languageId || !settings.enabledLanguages.includes(languageId)) {
+    return null
   }
-  return analyzer.analyze(content)
+
+  if (languageId === 'markdown') {
+    return analyzeMarkdownText(content)
+  }
+  if (languageId === 'yaml') {
+    return analyzeYamlText(content)
+  }
+
+  if (settings.engine !== 'tree-sitter') return null
+  return analyzeWithTreeSitter(languageId, content)
 }

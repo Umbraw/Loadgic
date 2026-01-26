@@ -1,0 +1,5 @@
+{
+  "name": "loadgic",
+  "version": "1.0.0",
+  "features": ["analyze", "visualize"]
+}

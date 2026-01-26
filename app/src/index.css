@@ -775,6 +775,21 @@ button.inspector-chip:hover,
   margin-bottom: 10px;
 }
 
+.settings-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 10px 0 6px;
+}
+
+.settings-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
 .settings-row {
   display: flex;
   align-items: center;

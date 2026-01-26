@@ -1,4 +1,9 @@
 import { useTheme, EDITOR_THEMES } from '../theme/ThemeProvider'
+import {
+  LANGUAGE_DEFINITIONS,
+  CORE_LANGUAGE_IDS,
+  OPTIONAL_LANGUAGE_IDS,
+} from '../analyzers/languages'
 
 // Toggle button for dark mode
 function ThemeToggle() {
@@ -34,7 +39,27 @@ function clamp(value: number, min: number, max: number) {
 
 // SettingsPage component
 export default function SettingsPage() {
-  const { logicSettings, setLogicSettings } = useTheme()
+  const { logicSettings, setLogicSettings, analysisSettings, setAnalysisSettings } =
+    useTheme()
+
+  const coreLanguages = LANGUAGE_DEFINITIONS.filter((language) =>
+    CORE_LANGUAGE_IDS.includes(language.id)
+  )
+  const optionalLanguages = LANGUAGE_DEFINITIONS.filter((language) =>
+    OPTIONAL_LANGUAGE_IDS.includes(language.id)
+  )
+
+  function toggleLanguage(languageId: string) {
+    setAnalysisSettings((prev) => {
+      const enabled = new Set(prev.enabledLanguages)
+      if (enabled.has(languageId as any)) {
+        enabled.delete(languageId as any)
+      } else {
+        enabled.add(languageId as any)
+      }
+      return { ...prev, enabledLanguages: Array.from(enabled) }
+    })
+  }
   return (
     <div className="settings-shell">
       <div className="settings-titlebar">
@@ -89,6 +114,36 @@ export default function SettingsPage() {
               }}
             />
           </label>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-section-title">Analyzers</div>
+          <div className="settings-note">
+            Languages are loaded on demand. Enabling a new language may require a
+            restart if the grammar is not yet available.
+          </div>
+          <div className="settings-subtitle">Core pack</div>
+          {coreLanguages.map((language) => (
+            <label className="settings-row" key={language.id}>
+              <span>{language.label}</span>
+              <input
+                type="checkbox"
+                checked={analysisSettings.enabledLanguages.includes(language.id)}
+                disabled
+              />
+            </label>
+          ))}
+          <div className="settings-subtitle">Optional pack</div>
+          {optionalLanguages.map((language) => (
+            <label className="settings-row" key={language.id}>
+              <span>{language.label}</span>
+              <input
+                type="checkbox"
+                checked={analysisSettings.enabledLanguages.includes(language.id)}
+                onChange={() => toggleLanguage(language.id)}
+              />
+            </label>
+          ))}
         </div>
       </div>
     </div>

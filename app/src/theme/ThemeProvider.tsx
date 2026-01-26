@@ -1,4 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import {
+  CORE_LANGUAGE_IDS,
+  type LanguageId,
+} from '../analyzers/languages'
+import type { AnalysisSettings } from '../analyzers'
 
 type Theme = 'dark' | 'light'
 type EditorTheme = 'oneDark' | 'dracula' | 'github' | 'solarized' | 'nord'
@@ -16,6 +21,8 @@ type ThemeContextValue = {
   setEditorTheme: (theme: EditorTheme) => void
   logicSettings: LogicSettings
   setLogicSettings: (settings: LogicSettings) => void
+  analysisSettings: AnalysisSettings
+  setAnalysisSettings: (settings: AnalysisSettings) => void
 }
 
 export const EDITOR_THEMES: { value: EditorTheme; label: string }[] = [
@@ -60,11 +67,35 @@ function getInitialLogicSettings(): LogicSettings {
   return { maxDepth: 2, maxChildren: 10 }
 }
 
+function getInitialAnalysisSettings(): AnalysisSettings {
+  if (typeof window === 'undefined') {
+    return { engine: 'tree-sitter', enabledLanguages: CORE_LANGUAGE_IDS }
+  }
+  const stored = window.localStorage.getItem('loadgic:analysisSettings')
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored) as Partial<AnalysisSettings>
+      const engine = parsed.engine === 'tree-sitter' ? parsed.engine : 'tree-sitter'
+      const enabledLanguages = Array.isArray(parsed.enabledLanguages)
+        ? (parsed.enabledLanguages as LanguageId[])
+        : CORE_LANGUAGE_IDS
+      const merged = Array.from(new Set([...CORE_LANGUAGE_IDS, ...enabledLanguages]))
+      return { engine, enabledLanguages: merged }
+    } catch {
+      return { engine: 'tree-sitter', enabledLanguages: CORE_LANGUAGE_IDS }
+    }
+  }
+  return { engine: 'tree-sitter', enabledLanguages: CORE_LANGUAGE_IDS }
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>(getInitialTheme)
   const [editorTheme, setEditorTheme] = useState<EditorTheme>(getInitialEditorTheme)
   const [logicSettings, setLogicSettings] = useState<LogicSettings>(
     getInitialLogicSettings
+  )
+  const [analysisSettings, setAnalysisSettings] = useState<AnalysisSettings>(
+    getInitialAnalysisSettings
   )
 
   useEffect(() => {
@@ -79,6 +110,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     window.localStorage.setItem('loadgic:logicSettings', JSON.stringify(logicSettings))
   }, [logicSettings])
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      'loadgic:analysisSettings',
+      JSON.stringify(analysisSettings)
+    )
+  }, [analysisSettings])
 
   useEffect(() => {
     function handleStorage(event: StorageEvent) {
@@ -102,6 +140,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           // ignore invalid storage value
         }
       }
+      if (event.key === 'loadgic:analysisSettings' && event.newValue) {
+        try {
+          const parsed = JSON.parse(event.newValue) as Partial<AnalysisSettings>
+          const engine = parsed.engine === 'tree-sitter' ? parsed.engine : 'tree-sitter'
+          const enabledLanguages = Array.isArray(parsed.enabledLanguages)
+            ? (parsed.enabledLanguages as LanguageId[])
+            : CORE_LANGUAGE_IDS
+          const merged = Array.from(new Set([...CORE_LANGUAGE_IDS, ...enabledLanguages]))
+          setAnalysisSettings({ engine, enabledLanguages: merged })
+        } catch {
+          // ignore invalid storage value
+        }
+      }
     }
     window.addEventListener('storage', handleStorage)
     return () => window.removeEventListener('storage', handleStorage)
@@ -116,8 +167,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setEditorTheme,
       logicSettings,
       setLogicSettings,
+      analysisSettings,
+      setAnalysisSettings,
     }),
-    [theme, editorTheme, logicSettings]
+    [theme, editorTheme, logicSettings, analysisSettings]
   )
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>

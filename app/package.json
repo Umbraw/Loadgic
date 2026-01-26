@@ -8,19 +8,19 @@
   "scripts": {
     "clean": "rimraf dist dist-electron release builder-debug.yml builder-effective-config.yaml node_modules .vite .electron .eslintcache coverage npm-debug.log* yarn-debug.log* yarn-error.log* pnpm-debug.log*",
 
+    "postinstall": "node scripts/prepare-treesitter-wasm.mjs",
     "dev": "vite",
     "dev:x11": "cross-env ELECTRON_OZONE_PLATFORM_HINT=x11 vite",
     "dev:wayland": "cross-env ELECTRON_OZONE_PLATFORM_HINT=wayland vite",
 
+    "predev": "node scripts/prepare-treesitter-wasm.mjs",
+    "prebuild": "node scripts/prepare-treesitter-wasm.mjs",
     "build": "tsc && vite build && electron-builder",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
 
   "dependencies": {
-    "@babel/parser": "^7.28.4",
-    "@babel/traverse": "^7.28.4",
-
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",
     "@codemirror/lang-java": "^6.0.1",
@@ -44,11 +44,12 @@
     "pixi.js": "^8.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.26.2"
+    "react-router-dom": "^6.26.2",
+    "web-tree-sitter": "^0.22.6",
+    "tree-sitter-wasms": "^0.1.13"
   },
 
   "devDependencies": {
-    "@types/babel__traverse": "^7.20.6",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
 

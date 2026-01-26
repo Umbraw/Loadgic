@@ -1,9 +1,12 @@
-import { analyzeFileContent } from '../analyzers'
+import { analyzeFileContent, type AnalysisSettings } from '../analyzers'
+import { setTreeSitterBaseUrl } from '../analyzers/treeSitterAnalyzer'
 
 type RequestMessage = {
   id: number
   filePath: string
   content: string
+  settings?: AnalysisSettings
+  baseUrl?: string
 }
 
 type ResponseMessage = {
@@ -12,7 +15,7 @@ type ResponseMessage = {
   hasAnalyzer: boolean
 }
 
-const cache = new Map<string, ReturnType<typeof analyzeFileContent>>()
+const cache = new Map<string, Awaited<ReturnType<typeof analyzeFileContent>>>()
 const hashByPath = new Map<string, string>()
 const LRU_LIMIT = 50
 
@@ -38,8 +41,13 @@ function hashText(value: string) {
   return (hash >>> 0).toString(36)
 }
 
-function handleMessage(event: MessageEvent<RequestMessage>) {
+async function handleMessage(event: MessageEvent<RequestMessage>) {
   const { id, filePath, content } = event.data
+  const settings = event.data.settings
+  if (event.data.baseUrl) {
+    setTreeSitterBaseUrl(event.data.baseUrl)
+  }
+  const settingsKey = settings ? JSON.stringify(settings) : 'default'
   const nextHash = hashText(content)
   const lastHash = hashByPath.get(filePath)
   if (lastHash && lastHash !== nextHash) {
@@ -47,7 +55,7 @@ function handleMessage(event: MessageEvent<RequestMessage>) {
   }
   hashByPath.set(filePath, nextHash)
 
-  const cacheKey = `${filePath}:${nextHash}`
+  const cacheKey = `${filePath}:${nextHash}:${hashText(settingsKey)}`
   const cached = cache.get(cacheKey)
   if (cached) {
     touchCache(cacheKey, cached)
@@ -57,7 +65,7 @@ function handleMessage(event: MessageEvent<RequestMessage>) {
     return
   }
 
-  const outline = analyzeFileContent(filePath, content)
+  const outline = await analyzeFileContent(filePath, content, settings)
   touchCache(cacheKey, outline)
   const response: ResponseMessage = {
     id,
