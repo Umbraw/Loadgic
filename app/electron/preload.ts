@@ -12,6 +12,12 @@ contextBridge.exposeInMainWorld('loadgic', {
   openSettingsWindow: () => ipcRenderer.invoke('window:open-settings'),
   minimizeSettings: () => ipcRenderer.invoke('settings:minimize'),
   closeSettings: () => ipcRenderer.invoke('settings:close'),
+  getTsSymbolDetail: (
+    filePath: string,
+    symbol: string,
+    line?: number,
+    column?: number
+  ) => ipcRenderer.invoke('ts:detail', filePath, symbol, line, column),
   onMainMessage: (handler: (message: string) => void) => {
     const listener = (_event: IpcRendererEvent, message: string) => {
       handler(message)

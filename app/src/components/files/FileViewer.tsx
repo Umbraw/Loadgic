@@ -29,7 +29,12 @@ type Props = {
   occurrenceIndex?: number | null
   focusRequest?: number
   onOccurrencesChange?: (count: number) => void
-  onSymbolSelect?: (symbol: string) => void
+  onSymbolSelect?: (selection: {
+    symbol: string
+    line: number
+    column: number
+    occurrenceIndex?: number
+  }) => void
 }
 
 const nord = nordInit({})
@@ -352,7 +357,17 @@ export default function FileViewer({
           const selectedText = state.sliceDoc(range.from, range.to).trim()
           if (selectedText.length) {
             event.preventDefault()
-            onSelect(selectedText)
+            const line = state.doc.lineAt(range.from)
+            const matches = collectMatches(state.doc.toString(), selectedText)
+            const occurrenceIndex = matches.findIndex(
+              (match) => range.from >= match.from && range.from <= match.to
+            )
+            onSelect({
+              symbol: selectedText,
+              line: line.number,
+              column: range.from - line.from + 1,
+              occurrenceIndex: occurrenceIndex >= 0 ? occurrenceIndex : undefined,
+            })
             return
           }
         }
@@ -360,7 +375,17 @@ export default function FileViewer({
       const symbol = getSymbolAtPosition(view.state.doc, pos)
       if (!symbol) return
       event.preventDefault()
-      onSelect(symbol)
+      const line = view.state.doc.lineAt(pos)
+      const matches = collectMatches(view.state.doc.toString(), symbol)
+      const occurrenceIndex = matches.findIndex(
+        (match) => pos >= match.from && pos <= match.to
+      )
+      onSelect({
+        symbol,
+        line: line.number,
+        column: pos - line.from + 1,
+        occurrenceIndex: occurrenceIndex >= 0 ? occurrenceIndex : undefined,
+      })
     }
 
     const dom = view.dom

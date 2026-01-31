@@ -8,7 +8,34 @@ type Props = {
   filePath: string | null
   fileContent: FileContent | null
   onRevealSymbol?: (symbol: string) => void
-  externalDetail?: { value: string; nonce: number } | null
+  externalDetail?: { value: string; line?: number; column?: number; nonce: number } | null
+}
+
+type TsDetail = {
+  symbol: string
+  kind: string
+  context: string
+  line: number
+  column: number
+  occurrences: number
+  lineText: string
+  container: string | null
+  modifiers: string[]
+  isExported: boolean
+  isDefaultExport: boolean
+  isAsync: boolean
+  isGenerator: boolean
+  snippet: string
+  tsDisplay?: string
+  tsDocs?: string
+  tsTags?: string[]
+  tsDefinition?: {
+    file: string
+    start: { line: number; offset: number }
+    end: { line: number; offset: number }
+  } | null
+  tsReferences?: number
+  tsDiagnostics?: number
 }
 
 // Section component displaying categorized items
@@ -112,9 +139,12 @@ export default function InspectorPanel({
   const requestIdRef = useRef(0)
   const [outline, setOutline] = useState<Outline | null>(null)
   const [hasAnalyzer, setHasAnalyzer] = useState(true)
-  const [tabs, setTabs] = useState<{ id: string; label: string; value?: string }[]>(
-    () => [{ id: 'overview', label: 'Overview' }]
-  )
+  const [tsDetail, setTsDetail] = useState<TsDetail | null>(null)
+  const [tsDetailLoading, setTsDetailLoading] = useState(false)
+  const tsDetailReqRef = useRef(0)
+  const [tabs, setTabs] = useState<
+    { id: string; label: string; value?: string; line?: number; column?: number }[]
+  >(() => [{ id: 'overview', label: 'Overview' }])
   const [activeTab, setActiveTab] = useState('overview')
 
   useEffect(() => {
@@ -141,6 +171,7 @@ export default function InspectorPanel({
     if (!filePath || !fileContent || fileContent.kind !== 'text') {
       setOutline(null)
       setHasAnalyzer(true)
+      setTsDetail(null)
       return
     }
 
@@ -158,15 +189,67 @@ export default function InspectorPanel({
   }, [filePath, fileContent, analysisSettings])
 
   useEffect(() => {
+    const activeDetail = tabs.find((tab) => tab.id === activeTab)
+    const detailItem = activeDetail?.value
+    if (!filePath || !detailItem || activeTab === 'overview') {
+      setTsDetail(null)
+      setTsDetailLoading(false)
+      return
+    }
+    const lower = filePath.toLowerCase()
+    if (!/\.(ts|tsx|js|jsx)$/.test(lower)) {
+      setTsDetail(null)
+      setTsDetailLoading(false)
+      return
+    }
+    const reqId = tsDetailReqRef.current + 1
+    tsDetailReqRef.current = reqId
+    setTsDetailLoading(true)
+    const fetchDetail = window.loadgic?.getTsSymbolDetail?.(
+      filePath,
+      detailItem,
+      activeDetail?.line,
+      activeDetail?.column
+    )
+    if (!fetchDetail) {
+      setTsDetail(null)
+      setTsDetailLoading(false)
+      return
+    }
+    let timedOut = false
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true
+      if (tsDetailReqRef.current === reqId) {
+        setTsDetail(null)
+        setTsDetailLoading(false)
+      }
+    }, 1500)
+    fetchDetail
+      .then((detail) => {
+        if (timedOut || tsDetailReqRef.current !== reqId) return
+        setTsDetail(detail)
+      })
+      .catch(() => {
+        if (timedOut || tsDetailReqRef.current !== reqId) return
+        setTsDetail(null)
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId)
+        if (timedOut || tsDetailReqRef.current !== reqId) return
+        setTsDetailLoading(false)
+      })
+  }, [filePath, activeTab, tabs])
+
+  useEffect(() => {
     if (!filePath) return
     setActiveTab((prev) => (tabs.some((tab) => tab.id === prev) ? prev : 'overview'))
   }, [filePath, tabs])
 
-  function handleSelectItem(value: string) {
+  function handleSelectItem(value: string, line?: number, column?: number) {
     const id = `detail:${value}`
     setTabs((prev) => {
       if (prev.some((tab) => tab.id === id)) return prev
-      return [...prev, { id, label: value, value }]
+      return [...prev, { id, label: value, value, line, column }]
     })
     setActiveTab(id)
   }
@@ -198,10 +281,21 @@ export default function InspectorPanel({
       const existing = prev.find((tab) => tab.id === selectorId)
       if (existing) {
         return prev.map((tab) =>
-          tab.id === selectorId ? { ...tab, value } : tab
+          tab.id === selectorId
+            ? { ...tab, value, line: externalDetail.line, column: externalDetail.column }
+            : tab
         )
       }
-      return [...prev, { id: selectorId, label: 'Selector', value }]
+      return [
+        ...prev,
+        {
+          id: selectorId,
+          label: 'Selector',
+          value,
+          line: externalDetail.line,
+          column: externalDetail.column,
+        },
+      ]
     })
     setActiveTab('selector')
   }, [externalDetail?.nonce])
@@ -279,19 +373,129 @@ export default function InspectorPanel({
         </div>
       )
     }
+    const extension =
+      filePath?.split('.').pop()?.toUpperCase() ?? 'Unknown'
     return (
       <div className="inspector-body inspector-scroll">
         {tabsBar}
         <div className="inspector-detail-header">
           <span className="inspector-detail-title">Detail</span>
+          <span className="inspector-detail-chip">{detailItem}</span>
         </div>
         <div className="inspector-detail-card">
-          <div className="inspector-detail-label">Selected element</div>
-          <div className="inspector-detail-value">{detailItem}</div>
-          <div className="inspector-detail-hint">
-            This detail page will be enriched with metadata, docs and references.
+          <div className="inspector-detail-label">Overview</div>
+          <div className="inspector-detail-grid">
+            <div>
+              <div className="inspector-detail-key">Symbol</div>
+              <div className="inspector-detail-value">{detailItem}</div>
+            </div>
+            <div>
+              <div className="inspector-detail-key">File type</div>
+              <div className="inspector-detail-value">{extension}</div>
+            </div>
           </div>
         </div>
+        {tsDetailLoading ? (
+          <div className="inspector-detail-hint">Loading TypeScript details…</div>
+        ) : tsDetail ? (
+          <div className="inspector-detail-card">
+            <div className="inspector-detail-label">TypeScript detail</div>
+            <div className="inspector-detail-grid">
+              <div>
+                <div className="inspector-detail-key">Context</div>
+                <div className="inspector-detail-value">{tsDetail.context}</div>
+              </div>
+              <div>
+                <div className="inspector-detail-key">Kind</div>
+                <div className="inspector-detail-value">{tsDetail.kind}</div>
+              </div>
+              <div>
+                <div className="inspector-detail-key">Location</div>
+                <div className="inspector-detail-value">
+                  Line {tsDetail.line}, Col {tsDetail.column}
+                </div>
+              </div>
+              <div>
+                <div className="inspector-detail-key">Occurrences</div>
+                <div className="inspector-detail-value">
+                  {tsDetail.tsReferences ?? tsDetail.occurrences}
+                </div>
+              </div>
+              <div>
+                <div className="inspector-detail-key">Container</div>
+                <div className="inspector-detail-value">
+                  {tsDetail.container ?? '—'}
+                </div>
+              </div>
+              <div>
+                <div className="inspector-detail-key">Modifiers</div>
+                <div className="inspector-detail-value">
+                  {tsDetail.modifiers.length
+                    ? tsDetail.modifiers.join(', ')
+                    : '—'}
+                </div>
+              </div>
+              <div>
+                <div className="inspector-detail-key">Exported</div>
+                <div className="inspector-detail-value">
+                  {tsDetail.isExported ? 'Yes' : 'No'}
+                </div>
+              </div>
+              <div>
+                <div className="inspector-detail-key">Default export</div>
+                <div className="inspector-detail-value">
+                  {tsDetail.isDefaultExport ? 'Yes' : 'No'}
+                </div>
+              </div>
+              <div>
+                <div className="inspector-detail-key">Async</div>
+                <div className="inspector-detail-value">
+                  {tsDetail.isAsync ? 'Yes' : 'No'}
+                </div>
+              </div>
+              <div>
+                <div className="inspector-detail-key">Generator</div>
+                <div className="inspector-detail-value">
+                  {tsDetail.isGenerator ? 'Yes' : 'No'}
+                </div>
+              </div>
+            </div>
+            <div className="inspector-detail-code">
+              <div className="inspector-detail-key">Declaration snippet</div>
+              <div className="inspector-detail-snippet">
+                {tsDetail.tsDisplay || tsDetail.snippet || 'No preview available.'}
+              </div>
+            </div>
+            {tsDetail.tsDocs ? (
+              <div className="inspector-detail-code">
+                <div className="inspector-detail-key">Documentation</div>
+                <div className="inspector-detail-snippet">{tsDetail.tsDocs}</div>
+              </div>
+            ) : null}
+            {tsDetail.tsDefinition ? (
+              <div className="inspector-detail-code">
+                <div className="inspector-detail-key">Definition</div>
+                <div className="inspector-detail-snippet">
+                  {tsDetail.tsDefinition.file}:{tsDetail.tsDefinition.start.line}:
+                  {tsDetail.tsDefinition.start.offset}
+                </div>
+              </div>
+            ) : null}
+            {typeof tsDetail.tsDiagnostics === 'number' ? (
+              <div className="inspector-detail-code">
+                <div className="inspector-detail-key">Diagnostics</div>
+                <div className="inspector-detail-snippet">
+                  {tsDetail.tsDiagnostics} issue
+                  {tsDetail.tsDiagnostics === 1 ? '' : 's'}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="inspector-detail-hint">
+            TypeScript details unavailable for this symbol.
+          </div>
+        )}
         {onRevealSymbol ? (
           <div className="inspector-detail-actions">
             <button

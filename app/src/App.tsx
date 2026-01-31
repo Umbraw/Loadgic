@@ -43,12 +43,15 @@ function App() {
   const [highlightRequest, setHighlightRequest] = useState(0)
   const [inspectorExternalDetail, setInspectorExternalDetail] = useState<{
     value: string
+    line?: number
+    column?: number
     nonce: number
   } | null>(null)
   const [inspectorSearch, setInspectorSearch] = useState('')
   const settingsMenuRef = useRef<HTMLDivElement | null>(null)
   const suppressContextCloseRef = useRef(false)
   const logicViewRef = useRef<LogicViewHandle | null>(null)
+  const skipHighlightResetRef = useRef(false)
   const isResizingRef = useRef(false)
   const isInspectorResizingRef = useRef(false)
   const panelWidthRef = useRef(panelWidth)
@@ -472,6 +475,7 @@ function App() {
     ) {
       return
     }
+    skipHighlightResetRef.current = true
     setHighlightQuery(symbol)
     setInspectorSearch(symbol)
     setHighlightIndex(0)
@@ -479,17 +483,33 @@ function App() {
     setActiveView('files')
   }
 
-  function handleCodeSymbolSelect(symbol: string) {
-    const trimmed = symbol.trim()
+  function handleCodeSymbolSelect(selection: {
+    symbol: string
+    line: number
+    column: number
+    occurrenceIndex?: number
+  }) {
+    const trimmed = selection.symbol.trim()
     if (!trimmed) return
-    handleRevealSymbol(trimmed)
+    skipHighlightResetRef.current = true
+    setHighlightQuery(trimmed)
+    setInspectorSearch(trimmed)
+    setHighlightIndex(selection.occurrenceIndex ?? 0)
+    setHighlightRequest((prev) => prev + 1)
+    setActiveView('files')
     setInspectorExternalDetail({
       value: trimmed,
+      line: selection.line,
+      column: selection.column,
       nonce: Date.now(),
     })
   }
 
   useEffect(() => {
+    if (skipHighlightResetRef.current) {
+      skipHighlightResetRef.current = false
+      return
+    }
     setHighlightIndex(null)
   }, [highlightQuery])
 

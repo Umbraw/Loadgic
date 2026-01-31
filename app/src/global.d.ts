@@ -14,6 +14,40 @@ declare global {
       readProjectTree: () => Promise<ProjectNode | null>
       listDir: (dirPath: string) => Promise<ProjectNode[] | null>
       readFile: (filePath: string) => Promise<FileContent | null>
+      getTsSymbolDetail: (
+        filePath: string,
+        symbol: string,
+        line?: number,
+        column?: number
+      ) => Promise<
+        | {
+            symbol: string
+            kind: string
+            context: string
+            line: number
+            column: number
+            occurrences: number
+            lineText: string
+            container: string | null
+            modifiers: string[]
+            isExported: boolean
+            isDefaultExport: boolean
+            isAsync: boolean
+            isGenerator: boolean
+            snippet: string
+            tsDisplay?: string
+            tsDocs?: string
+            tsTags?: string[]
+            tsDefinition?: {
+              file: string
+              start: { line: number; offset: number }
+              end: { line: number; offset: number }
+            } | null
+            tsReferences?: number
+            tsDiagnostics?: number
+          }
+        | null
+      >
       openSettingsWindow: () => Promise<void>
       minimizeSettings: () => Promise<void>
       closeSettings: () => Promise<void>
