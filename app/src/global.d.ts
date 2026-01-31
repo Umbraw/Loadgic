@@ -43,7 +43,15 @@ declare global {
               start: { line: number; offset: number }
               end: { line: number; offset: number }
             } | null
+            tsTypeDefinition?: {
+              file: string
+              start: { line: number; offset: number }
+              end: { line: number; offset: number }
+            } | null
             tsReferences?: number
+            tsOccurrences?: number
+            tsSignature?: string
+            tsSignatureActiveParam?: number | null
             tsDiagnostics?: number
           }
         | null

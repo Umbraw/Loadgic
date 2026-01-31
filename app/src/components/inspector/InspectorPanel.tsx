@@ -418,7 +418,9 @@ export default function InspectorPanel({
               <div>
                 <div className="inspector-detail-key">Occurrences</div>
                 <div className="inspector-detail-value">
-                  {tsDetail.tsReferences ?? tsDetail.occurrences}
+                  {tsDetail.tsOccurrences ??
+                    tsDetail.tsReferences ??
+                    tsDetail.occurrences}
                 </div>
               </div>
               <div>
@@ -479,6 +481,29 @@ export default function InspectorPanel({
                   {tsDetail.tsDefinition.file}:{tsDetail.tsDefinition.start.line}:
                   {tsDetail.tsDefinition.start.offset}
                 </div>
+              </div>
+            ) : null}
+            {tsDetail.tsTypeDefinition ? (
+              <div className="inspector-detail-code">
+                <div className="inspector-detail-key">Type definition</div>
+                <div className="inspector-detail-snippet">
+                  {tsDetail.tsTypeDefinition.file}:
+                  {tsDetail.tsTypeDefinition.start.line}:
+                  {tsDetail.tsTypeDefinition.start.offset}
+                </div>
+              </div>
+            ) : null}
+            {tsDetail.tsSignature ? (
+              <div className="inspector-detail-code">
+                <div className="inspector-detail-key">Signature</div>
+                <div className="inspector-detail-snippet">
+                  {tsDetail.tsSignature}
+                </div>
+                {typeof tsDetail.tsSignatureActiveParam === 'number' ? (
+                  <div className="inspector-detail-hint">
+                    Active parameter: {tsDetail.tsSignatureActiveParam + 1}
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {typeof tsDetail.tsDiagnostics === 'number' ? (

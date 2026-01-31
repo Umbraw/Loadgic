@@ -57,6 +57,12 @@ type TsLocation = {
   end: { line: number; offset: number }
 }
 
+type TsSignatureHelp = {
+  items?: { prefixDisplayParts?: { text: string }[]; parameters?: { displayParts?: { text: string }[] }[]; suffixDisplayParts?: { text: string }[] }[]
+  selectedItemIndex?: number
+  argumentIndex?: number
+}
+
 class TsServerClient {
   private proc: ChildProcessWithoutNullStreams
   private seq = 0
@@ -149,6 +155,21 @@ class TsServerClient {
   async references(filePath: string, line: number, offset: number) {
     const res = await this.send('references', { file: filePath, line, offset })
     return (res.body?.refs ?? []) as TsLocation[]
+  }
+
+  async occurrences(filePath: string, line: number, offset: number) {
+    const res = await this.send('occurrences', { file: filePath, line, offset })
+    return (res.body ?? []) as TsLocation[]
+  }
+
+  async typeDefinition(filePath: string, line: number, offset: number) {
+    const res = await this.send('typeDefinition', { file: filePath, line, offset })
+    return (res.body ?? []) as TsLocation[]
+  }
+
+  async signatureHelp(filePath: string, line: number, offset: number) {
+    const res = await this.send('signatureHelp', { file: filePath, line, offset })
+    return (res.body ?? {}) as TsSignatureHelp
   }
 
   async semanticDiagnostics(filePath: string) {
@@ -610,13 +631,19 @@ ipcMain.handle(
       let quick: TsQuickInfo | undefined
       let defs: TsLocation[] = []
       let refs: TsLocation[] = []
+      let occs: TsLocation[] = []
+      let typeDefs: TsLocation[] = []
+      let sig: TsSignatureHelp | undefined
       let diags: { text: string; code: number; category: string }[] = []
       try {
-        ;[quick, defs, refs, diags] = await withTimeout(
+        ;[quick, defs, refs, occs, typeDefs, sig, diags] = await withTimeout(
           Promise.all([
             tsServer.quickInfo(resolvedFile, lineNumber, offset),
             tsServer.definition(resolvedFile, lineNumber, offset),
             tsServer.references(resolvedFile, lineNumber, offset),
+            tsServer.occurrences(resolvedFile, lineNumber, offset),
+            tsServer.typeDefinition(resolvedFile, lineNumber, offset),
+            tsServer.signatureHelp(resolvedFile, lineNumber, offset),
             tsServer.semanticDiagnostics(resolvedFile),
           ]),
           1200
@@ -648,7 +675,19 @@ ipcMain.handle(
           quick?.tags?.map((tag) => `${tag.name}${tag.text ? `: ${tag.text}` : ''}`) ??
           [],
         tsDefinition: defs[0] ?? null,
+        tsTypeDefinition: typeDefs[0] ?? null,
         tsReferences: refs.length,
+        tsOccurrences: occs.length,
+        tsSignature: sig?.items?.length
+          ? `${sig.items[0]?.prefixDisplayParts?.map((part) => part.text).join('') ?? ''}${
+              sig.items[0]?.parameters
+                ?.map((param) =>
+                  param.displayParts?.map((part) => part.text).join('')
+                )
+                .join(', ') ?? ''
+            }${sig.items[0]?.suffixDisplayParts?.map((part) => part.text).join('') ?? ''}`
+          : '',
+        tsSignatureActiveParam: sig?.argumentIndex ?? null,
         tsDiagnostics: diags.length,
       }
     }
