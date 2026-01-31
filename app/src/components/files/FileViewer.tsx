@@ -26,6 +26,7 @@ type Props = {
   content: string
   filePath: string
   highlightQuery?: string | null
+  onOccurrencesChange?: (count: number) => void
   onSymbolSelect?: (symbol: string) => void
 }
 
@@ -235,6 +236,7 @@ export default function FileViewer({
   content,
   filePath,
   highlightQuery,
+  onOccurrencesChange,
   onSymbolSelect,
 }: Props) {
   const { theme, editorTheme } = useTheme()
@@ -250,6 +252,15 @@ export default function FileViewer({
     () => (highlightQuery ? createInspectorExtensions(highlightQuery) : []),
     [highlightQuery]
   )
+
+  const matches = useMemo(
+    () => (highlightQuery ? collectMatches(content, highlightQuery) : []),
+    [content, highlightQuery]
+  )
+
+  useEffect(() => {
+    onOccurrencesChange?.(matches.length)
+  }, [matches.length, onOccurrencesChange])
 
   useEffect(() => {
     if (!editorView || !onSymbolSelect) return

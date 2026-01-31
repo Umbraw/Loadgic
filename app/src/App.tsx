@@ -38,6 +38,7 @@ function App() {
     items: { label: string; action: () => void }[]
   } | null>(null)
   const [highlightQuery, setHighlightQuery] = useState<string | null>(null)
+  const [highlightTotal, setHighlightTotal] = useState(0)
   const [inspectorSearch, setInspectorSearch] = useState('')
   const settingsMenuRef = useRef<HTMLDivElement | null>(null)
   const suppressContextCloseRef = useRef(false)
@@ -423,6 +424,7 @@ function App() {
   // Handle file selection
   async function handleSelectFile(filePath: string) {
     setHighlightQuery(null)
+    setHighlightTotal(0)
     setInspectorSearch('')
     setSelectedFilePath(filePath)
     const result = await window.loadgic?.readFile?.(filePath)
@@ -611,6 +613,7 @@ function App() {
                     content={selectedFileContent.content}
                     filePath={selectedFilePath}
                     highlightQuery={highlightQuery}
+                    onOccurrencesChange={setHighlightTotal}
                     onSymbolSelect={handleRevealSymbol}
                   />
                 ) : selectedFileContent.kind === 'image' ? (
@@ -672,28 +675,37 @@ function App() {
         ) : null}
         <aside className="inspector">
           <div className="inspector-header">
-            <span>INSPECTOR</span>
-            <input
-              className="inspector-search"
-              type="search"
-              placeholder="Search in file"
-              value={inspectorSearch}
-              onChange={(event) => {
-                const value = event.target.value
-                setInspectorSearch(value)
-                setHighlightQuery(value.trim() ? value : null)
-              }}
-            />
-            <button
-              className="inspector-toggle"
-              onClick={() => setIsInspectorOpen(false)}
-              aria-label="Hide inspector"
-              title="Hide inspector"
-              type="button"
-            >
-              <span className="inspector-toggle-icon">&gt;</span>
-              <span className="inspector-toggle-text">Hide</span>
-            </button>
+            <div className="inspector-title-row">
+              <span className="inspector-title">INSPECTOR</span>
+              <button
+                className="inspector-toggle"
+                onClick={() => setIsInspectorOpen(false)}
+                aria-label="Hide inspector"
+                title="Hide inspector"
+                type="button"
+              >
+                <span className="inspector-toggle-icon">&gt;</span>
+                <span className="inspector-toggle-text">Hide</span>
+              </button>
+            </div>
+            <div className="inspector-search-wrap">
+              <input
+                className="inspector-search"
+                type="search"
+                placeholder="Search in file"
+                value={inspectorSearch}
+                onChange={(event) => {
+                  const value = event.target.value
+                  setInspectorSearch(value)
+                  setHighlightQuery(value.trim() ? value : null)
+                }}
+              />
+              {highlightQuery && highlightQuery.trim() ? (
+                <span className="inspector-search-count">
+                  {highlightTotal > 0 ? `1 / ${highlightTotal}` : '0 / 0'}
+                </span>
+              ) : null}
+            </div>
           </div>
           <InspectorPanel
             filePath={selectedFilePath}
