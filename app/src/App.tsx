@@ -39,6 +39,8 @@ function App() {
   } | null>(null)
   const [highlightQuery, setHighlightQuery] = useState<string | null>(null)
   const [highlightTotal, setHighlightTotal] = useState(0)
+  const [highlightIndex, setHighlightIndex] = useState<number | null>(null)
+  const [highlightRequest, setHighlightRequest] = useState(0)
   const [inspectorSearch, setInspectorSearch] = useState('')
   const settingsMenuRef = useRef<HTMLDivElement | null>(null)
   const suppressContextCloseRef = useRef(false)
@@ -425,6 +427,7 @@ function App() {
   async function handleSelectFile(filePath: string) {
     setHighlightQuery(null)
     setHighlightTotal(0)
+    setHighlightIndex(null)
     setInspectorSearch('')
     setSelectedFilePath(filePath)
     const result = await window.loadgic?.readFile?.(filePath)
@@ -467,6 +470,23 @@ function App() {
     }
     setHighlightQuery(symbol)
     setInspectorSearch(symbol)
+    setHighlightIndex(0)
+    setHighlightRequest((prev) => prev + 1)
+    setActiveView('files')
+  }
+
+  useEffect(() => {
+    setHighlightIndex(null)
+  }, [highlightQuery])
+
+  function handleSearchEnter() {
+    if (!highlightQuery || !highlightQuery.trim()) return
+    setHighlightIndex((prev) => {
+      if (prev == null) return 0
+      if (highlightTotal <= 0) return prev
+      return (prev + 1) % highlightTotal
+    })
+    setHighlightRequest((prev) => prev + 1)
     setActiveView('files')
   }
 
@@ -613,6 +633,8 @@ function App() {
                     content={selectedFileContent.content}
                     filePath={selectedFilePath}
                     highlightQuery={highlightQuery}
+                    occurrenceIndex={highlightIndex}
+                    focusRequest={highlightRequest}
                     onOccurrencesChange={setHighlightTotal}
                     onSymbolSelect={handleRevealSymbol}
                   />
@@ -699,10 +721,17 @@ function App() {
                   setInspectorSearch(value)
                   setHighlightQuery(value.trim() ? value : null)
                 }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return
+                  event.preventDefault()
+                  handleSearchEnter()
+                }}
               />
               {highlightQuery && highlightQuery.trim() ? (
                 <span className="inspector-search-count">
-                  {highlightTotal > 0 ? `1 / ${highlightTotal}` : '0 / 0'}
+                  {highlightTotal > 0 && highlightIndex != null
+                    ? `${highlightIndex + 1} / ${highlightTotal}`
+                    : `0 / ${highlightTotal}`}
                 </span>
               ) : null}
             </div>

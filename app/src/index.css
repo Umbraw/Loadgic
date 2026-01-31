@@ -900,11 +900,17 @@ button.inspector-chip:hover,
 }
 
 .cm-inspector-highlight {
-  background: var(--inspector-highlight);
+  background: rgba(59, 130, 246, 0.22);
   border-radius: 4px;
-  box-shadow: 0 0 0 2px rgba(249, 168, 37, 0.5);
-  padding: 0 1px;
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.55);
+  padding: 1px 3px;
   box-decoration-break: clone;
+}
+
+.cm-inspector-highlight-active {
+  background: rgba(16, 185, 129, 0.28);
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.7);
+  padding: 1px 3px;
 }
 
 .cm-inspector-markers {
@@ -920,8 +926,8 @@ button.inspector-chip:hover,
   right: 0;
   height: 4px;
   border-radius: 999px;
-  background: rgba(249, 168, 37, 0.9);
-  box-shadow: 0 0 6px rgba(249, 168, 37, 0.45);
+  background: rgba(59, 130, 246, 0.9);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.6);
 }
 
 /* =========================

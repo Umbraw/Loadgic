@@ -18,7 +18,7 @@ import { php } from '@codemirror/lang-php'
 import { sql } from '@codemirror/lang-sql'
 import { useEffect, useMemo, useState } from 'react'
 import { RangeSetBuilder, type Extension, type Text } from '@codemirror/state'
-import { Decoration, type EditorView, ViewPlugin } from '@codemirror/view'
+import { Decoration, EditorView, ViewPlugin } from '@codemirror/view'
 import { useTheme } from '../../theme/ThemeProvider'
 
 // Props for FileViewer component
@@ -26,6 +26,8 @@ type Props = {
   content: string
   filePath: string
   highlightQuery?: string | null
+  occurrenceIndex?: number | null
+  focusRequest?: number
   onOccurrencesChange?: (count: number) => void
   onSymbolSelect?: (symbol: string) => void
 }
@@ -158,17 +160,45 @@ function buildHighlightDecorations(view: EditorView, query: string) {
   return builder.finish()
 }
 
-function createHighlightExtension(query: string) {
+function createHighlightExtension(query: string, activeIndex?: number | null) {
   if (!query.trim()) return []
   return ViewPlugin.fromClass(
     class {
       decorations
       constructor(view: EditorView) {
         this.decorations = buildHighlightDecorations(view, query)
+        if (activeIndex != null) {
+          const matches = collectMatches(view.state.doc.toString(), query)
+          const active = matches[activeIndex]
+          if (active) {
+            this.decorations = this.decorations.update({
+              add: [
+                Decoration.mark({ class: 'cm-inspector-highlight-active' }).range(
+                  active.from,
+                  active.to
+                ),
+              ],
+            })
+          }
+        }
       }
       update(update: { view: EditorView; docChanged: boolean }) {
         if (update.docChanged) {
           this.decorations = buildHighlightDecorations(update.view, query)
+          if (activeIndex != null) {
+            const matches = collectMatches(update.view.state.doc.toString(), query)
+            const active = matches[activeIndex]
+            if (active) {
+              this.decorations = this.decorations.update({
+                add: [
+                  Decoration.mark({ class: 'cm-inspector-highlight-active' }).range(
+                    active.from,
+                    active.to
+                  ),
+                ],
+              })
+            }
+          }
         }
       }
     },
@@ -194,7 +224,7 @@ function createMarkersExtension(query: string) {
         docChanged: boolean
         geometryChanged: boolean
       }) {
-        if (update.docChanged || update.geometryChanged) {
+        if (update.docChanged) {
           this.updateMarkers(update.view)
         }
       }
@@ -226,9 +256,12 @@ function createMarkersExtension(query: string) {
   )
 }
 
-function createInspectorExtensions(query: string) {
+function createInspectorExtensions(query: string, activeIndex?: number | null) {
   if (!query.trim()) return []
-  return [createHighlightExtension(query), createMarkersExtension(query)]
+  return [
+    createHighlightExtension(query, activeIndex),
+    createMarkersExtension(query),
+  ]
 }
 
 // Main FileViewer component
@@ -236,6 +269,8 @@ export default function FileViewer({
   content,
   filePath,
   highlightQuery,
+  occurrenceIndex,
+  focusRequest,
   onOccurrencesChange,
   onSymbolSelect,
 }: Props) {
@@ -249,8 +284,11 @@ export default function FileViewer({
   const [editorView, setEditorView] = useState<EditorView | null>(null)
 
   const highlightExtension = useMemo(
-    () => (highlightQuery ? createInspectorExtensions(highlightQuery) : []),
-    [highlightQuery]
+    () =>
+      highlightQuery
+        ? createInspectorExtensions(highlightQuery, occurrenceIndex)
+        : [],
+    [highlightQuery, occurrenceIndex]
   )
 
   const matches = useMemo(
@@ -261,6 +299,33 @@ export default function FileViewer({
   useEffect(() => {
     onOccurrencesChange?.(matches.length)
   }, [matches.length, onOccurrencesChange])
+
+  useEffect(() => {
+    if (!editorView) return
+    if (!matches.length || occurrenceIndex == null) return
+    const clampedIndex = Math.min(
+      Math.max(occurrenceIndex, 0),
+      matches.length - 1
+    )
+    const match = matches[clampedIndex]
+    window.requestAnimationFrame(() => {
+      editorView.dispatch({
+        selection: { anchor: match.from, head: match.from },
+      })
+      const domAtPos = editorView.domAtPos(match.from).node
+      const node =
+        domAtPos instanceof HTMLElement ? domAtPos : domAtPos.parentElement
+      const line = node?.closest('.cm-line') as HTMLElement | null
+      if (line) {
+        line.scrollIntoView({ block: 'center', behavior: 'auto' })
+        return
+      }
+      editorView.dispatch({
+        effects: EditorView.scrollIntoView(match.from, { y: 'center' }),
+      })
+    })
+  }, [editorView, matches, occurrenceIndex, focusRequest])
+
 
   useEffect(() => {
     if (!editorView || !onSymbolSelect) return
