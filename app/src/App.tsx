@@ -779,7 +779,12 @@ function App() {
                 onChange={(event) => {
                   const value = event.target.value
                   setInspectorSearch(value)
-                  setHighlightQuery(value.trim() ? value : null)
+                  const next = value.trim()
+                  setHighlightQuery(next ? value : null)
+                  if (!next) {
+                    setHighlightIndex(null)
+                    setHighlightTotal(0)
+                  }
                 }}
                 onKeyDown={(event) => {
                   if (event.key !== 'Enter') return
