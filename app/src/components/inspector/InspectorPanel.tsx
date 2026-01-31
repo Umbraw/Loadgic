@@ -8,8 +8,14 @@ type Props = {
   filePath: string | null
   fileContent: FileContent | null
   onRevealSymbol?: (symbol: string) => void
-  onDetailFocus?: (symbol: string) => void
-  externalDetail?: { value: string; line?: number; column?: number; nonce: number } | null
+  onDetailFocus?: (symbol: string, occurrenceIndex?: number) => void
+  externalDetail?: {
+    value: string
+    line?: number
+    column?: number
+    occurrenceIndex?: number
+    nonce: number
+  } | null
 }
 
 type TsDetail = {
@@ -245,7 +251,14 @@ export default function InspectorPanel({
   const tsDetailReqRef = useRef(0)
   const pyDetailReqRef = useRef(0)
   const [tabs, setTabs] = useState<
-    { id: string; label: string; value?: string; line?: number; column?: number }[]
+    {
+      id: string
+      label: string
+      value?: string
+      line?: number
+      column?: number
+      occurrenceIndex?: number
+    }[]
   >(() => [{ id: 'overview', label: 'Overview' }])
   const [activeTab, setActiveTab] = useState('overview')
 
@@ -401,9 +414,13 @@ export default function InspectorPanel({
 
   useEffect(() => {
     if (activeTab === 'overview') return
-    const detailItem = tabs.find((tab) => tab.id === activeTab)?.value
+    const activeDetail = tabs.find((tab) => tab.id === activeTab)
+    const detailItem = activeDetail?.value
     if (!detailItem) return
-    onDetailFocus?.(detailItem)
+    if (activeDetail?.id === 'selector') {
+      return
+    }
+    onDetailFocus?.(detailItem, activeDetail?.occurrenceIndex)
   }, [activeTab, tabs, onDetailFocus])
 
   function handleSelectItem(value: string, line?: number, column?: number) {
@@ -443,7 +460,13 @@ export default function InspectorPanel({
       if (existing) {
         return prev.map((tab) =>
           tab.id === selectorId
-            ? { ...tab, value, line: externalDetail.line, column: externalDetail.column }
+            ? {
+                ...tab,
+                value,
+                line: externalDetail.line,
+                column: externalDetail.column,
+                occurrenceIndex: externalDetail.occurrenceIndex,
+              }
             : tab
         )
       }
@@ -455,6 +478,7 @@ export default function InspectorPanel({
           value,
           line: externalDetail.line,
           column: externalDetail.column,
+          occurrenceIndex: externalDetail.occurrenceIndex,
         },
       ]
     })

@@ -17,7 +17,12 @@ import { rust } from '@codemirror/lang-rust'
 import { php } from '@codemirror/lang-php'
 import { sql } from '@codemirror/lang-sql'
 import { useEffect, useMemo, useState } from 'react'
-import { RangeSetBuilder, type Extension, type Text } from '@codemirror/state'
+import {
+  Facet,
+  RangeSetBuilder,
+  type Extension,
+  type Text,
+} from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin } from '@codemirror/view'
 import { useTheme } from '../../theme/ThemeProvider'
 
@@ -165,13 +170,18 @@ function buildHighlightDecorations(view: EditorView, query: string) {
   return builder.finish()
 }
 
-function createHighlightExtension(query: string, activeIndex?: number | null) {
+const activeIndexFacet = Facet.define<number | null, number | null>({
+  combine: (values) => (values.length ? values[0] : null),
+})
+
+function createHighlightExtension(query: string) {
   if (!query.trim()) return []
   return ViewPlugin.fromClass(
     class {
       decorations
       constructor(view: EditorView) {
         this.decorations = buildHighlightDecorations(view, query)
+        const activeIndex = view.state.facet(activeIndexFacet)
         if (activeIndex != null) {
           const matches = collectMatches(view.state.doc.toString(), query)
           const active = matches[activeIndex]
@@ -187,12 +197,19 @@ function createHighlightExtension(query: string, activeIndex?: number | null) {
           }
         }
       }
-      update(update: { view: EditorView; docChanged: boolean }) {
-        if (update.docChanged) {
+      update(update: {
+        view: EditorView
+        docChanged: boolean
+        startState: EditorView['state']
+        state: EditorView['state']
+      }) {
+        const prevIndex = update.startState.facet(activeIndexFacet)
+        const nextIndex = update.state.facet(activeIndexFacet)
+        if (update.docChanged || prevIndex !== nextIndex) {
           this.decorations = buildHighlightDecorations(update.view, query)
-          if (activeIndex != null) {
+          if (nextIndex != null) {
             const matches = collectMatches(update.view.state.doc.toString(), query)
-            const active = matches[activeIndex]
+            const active = matches[nextIndex]
             if (active) {
               this.decorations = this.decorations.update({
                 add: [
@@ -264,7 +281,8 @@ function createMarkersExtension(query: string) {
 function createInspectorExtensions(query: string, activeIndex?: number | null) {
   if (!query.trim()) return []
   return [
-    createHighlightExtension(query, activeIndex),
+    activeIndexFacet.of(activeIndex ?? null),
+    createHighlightExtension(query),
     createMarkersExtension(query),
   ]
 }

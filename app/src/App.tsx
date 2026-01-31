@@ -1,6 +1,6 @@
 import Sidebar from './components/sidebar/ActivityBar'
 import SidePanel from './components/sidebar/SidePanel'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ViewMode } from './types/view'
 import type { ProjectNode } from './types/project'
 import type { FileContent } from './types/file'
@@ -45,6 +45,7 @@ function App() {
     value: string
     line?: number
     column?: number
+    occurrenceIndex?: number
     nonce: number
   } | null>(null)
   const [inspectorSearch, setInspectorSearch] = useState('')
@@ -483,14 +484,29 @@ function App() {
     setActiveView('files')
   }
 
-  function handleDetailFocus(symbol: string) {
-    if (!symbol.trim()) return
-    skipHighlightResetRef.current = true
-    setHighlightQuery(symbol)
-    setInspectorSearch(symbol)
-    setHighlightIndex(0)
-    setHighlightRequest((prev) => prev + 1)
-  }
+  const handleDetailFocus = useCallback(
+    (symbol: string, occurrenceIndex?: number) => {
+      const trimmed = symbol.trim()
+      if (!trimmed) return
+      const sameQuery = highlightQuery?.trim() === trimmed
+      if (sameQuery) {
+        if (
+          typeof occurrenceIndex === 'number' &&
+          occurrenceIndex !== highlightIndex
+        ) {
+          setHighlightIndex(occurrenceIndex)
+          setHighlightRequest((prev) => prev + 1)
+        }
+        return
+      }
+      skipHighlightResetRef.current = true
+      setHighlightQuery(trimmed)
+      setInspectorSearch(trimmed)
+      setHighlightIndex(occurrenceIndex ?? 0)
+      setHighlightRequest((prev) => prev + 1)
+    },
+    [highlightQuery, highlightIndex]
+  )
 
   function handleCodeSymbolSelect(selection: {
     symbol: string
@@ -510,6 +526,7 @@ function App() {
       value: trimmed,
       line: selection.line,
       column: selection.column,
+      occurrenceIndex: selection.occurrenceIndex,
       nonce: Date.now(),
     })
   }
