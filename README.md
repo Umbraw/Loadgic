@@ -41,6 +41,7 @@ This project is built with:
 * Inspector: structural analysis for multiple languages (JS/TS, Python, Go, Rust, Java, C/C++, C#, PHP, Ruby, JSON, YAML)  
 * Inspector detail tabs: click any symbol to open a dedicated detail view (multiple detail tabs supported)  
 * TypeScript/JavaScript detail: uses local `tsserver` (from the `typescript` package) for richer symbol info when available  
+* Python detail: uses local `pyright` (LSP) for hover/definitions/references/signatures when available  
 * Markdown/YAML overview (text-based fallback without WASM)  
 
 ---
@@ -100,7 +101,8 @@ Changes in the code will automatically refresh the application.
 Loadgic uses **Tree-sitter** for multi-language parsing.  
 WASM files are copied to `app/public/treesitter/` on install/build.
 
-For JS/TS detail tabs, Loadgic also queries **tsserver** locally (from the `typescript` dependency) to enrich symbol details.
+For JS/TS detail tabs, Loadgic also queries **tsserver** locally (from the `typescript` dependency) to enrich symbol details.  
+Python detail tabs use **pyright** locally (LSP) for richer symbol information.
 
 **Core pack (enabled by default):**
 - JavaScript, JSX, TypeScript, TSX

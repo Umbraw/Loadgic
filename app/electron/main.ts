@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { readFile, readdir } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -179,6 +179,220 @@ class TsServerClient {
 }
 
 let tsServerClient: TsServerClient | null = null
+
+type LspLocation = {
+  uri: string
+  range: { start: { line: number; character: number }; end: { line: number; character: number } }
+}
+
+type LspHover = {
+  contents?: { kind?: string; value?: string } | { value?: string } | string
+}
+
+type LspSignatureHelp = {
+  signatures?: { label?: string; documentation?: { value?: string } | string }[]
+  activeSignature?: number
+  activeParameter?: number
+}
+
+type LspDocumentHighlight = {
+  range: { start: { line: number; character: number }; end: { line: number; character: number } }
+}
+
+type LspDocumentSymbol = {
+  name: string
+  kind: number
+  range: { start: { line: number; character: number }; end: { line: number; character: number } }
+  children?: LspDocumentSymbol[]
+}
+
+class LspClient {
+  private proc: ChildProcessWithoutNullStreams
+  private seq = 0
+  private pending = new Map<number, (data: any) => void>()
+  private buffer = Buffer.alloc(0)
+  private ready = false
+
+  constructor(command: string, args: string[]) {
+    this.proc = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] })
+    this.proc.stdout.on('data', (chunk) => this.handleData(chunk))
+    this.proc.stderr.on('data', () => {
+      // ignore noisy stderr
+    })
+  }
+
+  private handleData(chunk: Buffer) {
+    this.buffer = Buffer.concat([this.buffer, chunk])
+    while (true) {
+      const headerEnd = this.buffer.indexOf('\r\n\r\n')
+      if (headerEnd === -1) return
+      const header = this.buffer.slice(0, headerEnd).toString('utf-8')
+      const match = header.match(/Content-Length:\s*(\d+)/i)
+      if (!match) {
+        this.buffer = this.buffer.slice(headerEnd + 4)
+        continue
+      }
+      const length = Number(match[1])
+      const messageStart = headerEnd + 4
+      const messageEnd = messageStart + length
+      if (this.buffer.length < messageEnd) return
+      const message = this.buffer.slice(messageStart, messageEnd).toString('utf-8')
+      this.buffer = this.buffer.slice(messageEnd)
+      const payload = JSON.parse(message)
+      if (payload.id && this.pending.has(payload.id)) {
+        const resolver = this.pending.get(payload.id)
+        if (resolver) {
+          this.pending.delete(payload.id)
+          resolver(payload)
+        }
+      }
+    }
+  }
+
+  private send(method: string, params: Record<string, any>) {
+    const id = ++this.seq
+    const request = JSON.stringify({
+      jsonrpc: '2.0',
+      id,
+      method,
+      params,
+    })
+    const payload = `Content-Length: ${Buffer.byteLength(request, 'utf-8')}\r\n\r\n${request}`
+    this.proc.stdin.write(payload)
+    return new Promise<any>((resolve) => {
+      this.pending.set(id, resolve)
+    })
+  }
+
+  private notify(method: string, params: Record<string, any>) {
+    const request = JSON.stringify({
+      jsonrpc: '2.0',
+      method,
+      params,
+    })
+    const payload = `Content-Length: ${Buffer.byteLength(request, 'utf-8')}\r\n\r\n${request}`
+    this.proc.stdin.write(payload)
+  }
+
+  async initialize(rootPath: string) {
+    if (this.ready) return
+    const rootUri = pathToFileURL(rootPath).toString()
+    await this.send('initialize', {
+      rootUri,
+      workspaceFolders: [{ uri: rootUri, name: path.basename(rootPath) }],
+      capabilities: {},
+    })
+    this.notify('initialized', {})
+    this.ready = true
+  }
+
+  openFile(filePath: string, content: string, languageId: string) {
+    const uri = pathToFileURL(filePath).toString()
+    this.notify('textDocument/didOpen', {
+      textDocument: {
+        uri,
+        languageId,
+        version: 1,
+        text: content,
+      },
+    })
+  }
+
+  async hover(filePath: string, line: number, character: number) {
+    const uri = pathToFileURL(filePath).toString()
+    const res = await this.send('textDocument/hover', {
+      textDocument: { uri },
+      position: { line: line - 1, character: character - 1 },
+    })
+    return (res.result ?? null) as LspHover | null
+  }
+
+  async definition(filePath: string, line: number, character: number) {
+    const uri = pathToFileURL(filePath).toString()
+    const res = await this.send('textDocument/definition', {
+      textDocument: { uri },
+      position: { line: line - 1, character: character - 1 },
+    })
+    return (res.result ?? []) as LspLocation[]
+  }
+
+  async references(filePath: string, line: number, character: number) {
+    const uri = pathToFileURL(filePath).toString()
+    const res = await this.send('textDocument/references', {
+      textDocument: { uri },
+      position: { line: line - 1, character: character - 1 },
+      context: { includeDeclaration: true },
+    })
+    return (res.result ?? []) as LspLocation[]
+  }
+
+  async signatureHelp(filePath: string, line: number, character: number) {
+    const uri = pathToFileURL(filePath).toString()
+    const res = await this.send('textDocument/signatureHelp', {
+      textDocument: { uri },
+      position: { line: line - 1, character: character - 1 },
+    })
+    return (res.result ?? null) as LspSignatureHelp | null
+  }
+
+  async typeDefinition(filePath: string, line: number, character: number) {
+    const uri = pathToFileURL(filePath).toString()
+    const res = await this.send('textDocument/typeDefinition', {
+      textDocument: { uri },
+      position: { line: line - 1, character: character - 1 },
+    })
+    return (res.result ?? []) as LspLocation[]
+  }
+
+  async documentHighlight(filePath: string, line: number, character: number) {
+    const uri = pathToFileURL(filePath).toString()
+    const res = await this.send('textDocument/documentHighlight', {
+      textDocument: { uri },
+      position: { line: line - 1, character: character - 1 },
+    })
+    return (res.result ?? []) as LspDocumentHighlight[]
+  }
+
+  async documentSymbol(filePath: string) {
+    const uri = pathToFileURL(filePath).toString()
+    const res = await this.send('textDocument/documentSymbol', {
+      textDocument: { uri },
+    })
+    return (res.result ?? []) as LspDocumentSymbol[]
+  }
+
+  async diagnostics(filePath: string) {
+    const uri = pathToFileURL(filePath).toString()
+    const res = await this.send('textDocument/diagnostic', {
+      textDocument: { uri },
+    })
+    return (res.result?.items ?? []) as { message: string }[]
+  }
+}
+
+let pyLspClient: LspClient | null = null
+
+function ensurePyLsp() {
+  if (pyLspClient) return pyLspClient
+  try {
+    const pyrightPath = require.resolve('pyright/langserver.index.js')
+    pyLspClient = new LspClient(process.execPath, [pyrightPath, '--stdio'])
+    return pyLspClient
+  } catch {
+    return null
+  }
+}
+
+function findFirstOccurrencePosition(content: string, symbol: string) {
+  if (!symbol) return null
+  const index = content.indexOf(symbol)
+  if (index === -1) return null
+  const before = content.slice(0, index)
+  const lines = before.split(/\r\n|\r|\n/)
+  const line = lines.length
+  const column = lines[lines.length - 1].length + 1
+  return { line, column }
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number) {
   return new Promise<T>((resolve, reject) => {
@@ -712,6 +926,103 @@ ipcMain.handle(
     return null
   }
 })
+
+ipcMain.handle(
+  'py:detail',
+  async (
+    _event,
+    filePath: string,
+    symbol: string,
+    line?: number,
+    column?: number
+  ) => {
+    if (!currentProjectRoot) return null
+    const resolvedRoot = path.resolve(currentProjectRoot)
+    const resolvedFile = path.resolve(filePath)
+    if (!resolvedFile.startsWith(resolvedRoot + path.sep)) {
+      return null
+    }
+    if (!symbol || typeof symbol !== 'string') return null
+
+    try {
+      const content = await readFile(resolvedFile, 'utf-8')
+      let position = { line, column }
+      if (!position.line || !position.column) {
+        const fallback = findFirstOccurrencePosition(content, symbol)
+        if (!fallback) return null
+        position = fallback
+      }
+
+      const lsp = ensurePyLsp()
+      if (!lsp) return null
+      await lsp.initialize(currentProjectRoot)
+      lsp.openFile(resolvedFile, content, 'python')
+
+      let hover: LspHover | null = null
+      let defs: LspLocation[] = []
+      let refs: LspLocation[] = []
+      let typeDefs: LspLocation[] = []
+      let highlights: LspDocumentHighlight[] = []
+      let symbols: LspDocumentSymbol[] = []
+      let sig: LspSignatureHelp | null = null
+      let diags: { message: string }[] = []
+      try {
+        ;[hover, defs, refs, typeDefs, highlights, symbols, sig, diags] = await withTimeout(
+          Promise.all([
+            lsp.hover(resolvedFile, position.line, position.column),
+            lsp.definition(resolvedFile, position.line, position.column),
+            lsp.references(resolvedFile, position.line, position.column),
+            lsp.typeDefinition(resolvedFile, position.line, position.column),
+            lsp.documentHighlight(resolvedFile, position.line, position.column),
+            lsp.documentSymbol(resolvedFile),
+            lsp.signatureHelp(resolvedFile, position.line, position.column),
+            lsp.diagnostics(resolvedFile),
+          ]),
+          1500
+        )
+      } catch {
+        // ignore LSP timeout
+      }
+
+      const hoverText =
+        typeof hover?.contents === 'string'
+          ? hover?.contents
+          : 'value' in (hover?.contents ?? {})
+          ? (hover?.contents as { value?: string }).value ?? ''
+          : (hover?.contents as { kind?: string; value?: string } | undefined)
+              ?.value ?? ''
+
+      const signature = sig?.signatures?.[sig.activeSignature ?? 0]?.label ?? ''
+
+      const symbolCounts: Record<string, number> = {}
+      const flattenSymbols = (items: LspDocumentSymbol[]) => {
+        for (const item of items) {
+          const key = String(item.kind)
+          symbolCounts[key] = (symbolCounts[key] ?? 0) + 1
+          if (item.children?.length) flattenSymbols(item.children)
+        }
+      }
+      flattenSymbols(symbols)
+
+      return {
+        symbol,
+        line: position.line,
+        column: position.column,
+        hover: hoverText,
+        signature,
+        signatureActiveParam: sig?.activeParameter ?? null,
+        definitions: defs,
+        typeDefinitions: typeDefs,
+        highlights: highlights.length,
+        symbolCounts,
+        references: refs.length,
+        diagnostics: diags.length,
+      }
+    } catch {
+      return null
+    }
+  }
+)
 
 function createWindow() {
   const iconPath = process.env.VITE_DEV_SERVER_URL

@@ -483,6 +483,15 @@ function App() {
     setActiveView('files')
   }
 
+  function handleDetailFocus(symbol: string) {
+    if (!symbol.trim()) return
+    skipHighlightResetRef.current = true
+    setHighlightQuery(symbol)
+    setInspectorSearch(symbol)
+    setHighlightIndex(0)
+    setHighlightRequest((prev) => prev + 1)
+  }
+
   function handleCodeSymbolSelect(selection: {
     symbol: string
     line: number
@@ -774,6 +783,7 @@ function App() {
             filePath={selectedFilePath}
             fileContent={selectedFileContent}
             onRevealSymbol={handleRevealSymbol}
+            onDetailFocus={handleDetailFocus}
             externalDetail={inspectorExternalDetail}
           />
         </aside>

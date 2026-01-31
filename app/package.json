@@ -46,6 +46,7 @@
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.26.2",
     "typescript": "^5.2.2",
+    "pyright": "^1.1.369",
     "web-tree-sitter": "^0.22.6",
     "tree-sitter-wasms": "^0.1.13"
   },

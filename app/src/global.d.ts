@@ -56,6 +56,40 @@ declare global {
           }
         | null
       >
+      getPySymbolDetail: (
+        filePath: string,
+        symbol: string,
+        line?: number,
+        column?: number
+      ) => Promise<
+        | {
+            symbol: string
+            line: number
+            column: number
+            hover: string
+            signature: string
+            signatureActiveParam: number | null
+            definitions: {
+              uri: string
+              range: {
+                start: { line: number; character: number }
+                end: { line: number; character: number }
+              }
+            }[]
+            typeDefinitions: {
+              uri: string
+              range: {
+                start: { line: number; character: number }
+                end: { line: number; character: number }
+              }
+            }[]
+            highlights: number
+            symbolCounts: Record<string, number>
+            references: number
+            diagnostics: number
+          }
+        | null
+      >
       openSettingsWindow: () => Promise<void>
       minimizeSettings: () => Promise<void>
       closeSettings: () => Promise<void>

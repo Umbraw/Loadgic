@@ -8,6 +8,7 @@ type Props = {
   filePath: string | null
   fileContent: FileContent | null
   onRevealSymbol?: (symbol: string) => void
+  onDetailFocus?: (symbol: string) => void
   externalDetail?: { value: string; line?: number; column?: number; nonce: number } | null
 }
 
@@ -132,8 +133,93 @@ export default function InspectorPanel({
   filePath,
   fileContent,
   onRevealSymbol,
+  onDetailFocus,
   externalDetail,
 }: Props) {
+  const mapSymbolKind = (kind: number) => {
+    switch (kind) {
+      case 1:
+        return 'File'
+      case 2:
+        return 'Module'
+      case 3:
+        return 'Namespace'
+      case 4:
+        return 'Package'
+      case 5:
+        return 'Class'
+      case 6:
+        return 'Method'
+      case 7:
+        return 'Property'
+      case 8:
+        return 'Field'
+      case 9:
+        return 'Constructor'
+      case 10:
+        return 'Enum'
+      case 11:
+        return 'Interface'
+      case 12:
+        return 'Function'
+      case 13:
+        return 'Variable'
+      case 14:
+        return 'Constant'
+      case 15:
+        return 'String'
+      case 16:
+        return 'Number'
+      case 17:
+        return 'Boolean'
+      case 18:
+        return 'Array'
+      case 19:
+        return 'Object'
+      case 20:
+        return 'Key'
+      case 21:
+        return 'Null'
+      case 22:
+        return 'EnumMember'
+      case 23:
+        return 'Struct'
+      case 24:
+        return 'Event'
+      case 25:
+        return 'Operator'
+      case 26:
+        return 'TypeParameter'
+      default:
+        return `Kind ${kind}`
+    }
+  }
+
+  const formatLspUri = (uri: string | undefined) => {
+    if (!uri) return '—'
+    if (!uri.startsWith('file://')) return uri
+    try {
+      const url = new URL(uri)
+      return decodeURIComponent(url.pathname)
+    } catch {
+      return uri.replace('file://', '')
+    }
+  }
+
+  const formatLspLocation = (
+    uri: string | undefined,
+    line?: number,
+    column?: number
+  ) => {
+    const pathText = formatLspUri(uri)
+    const name = pathText.split('/').pop() || pathText
+    const displayLine = typeof line === 'number' ? line + 1 : '—'
+    const displayCol = typeof column === 'number' ? column + 1 : '—'
+    return {
+      title: `${name}:${displayLine}:${displayCol}`,
+      full: pathText,
+    }
+  }
   const { analysisSettings } = useTheme()
   const workerRef = useRef<Worker | null>(null)
   const requestIdRef = useRef(0)
@@ -141,7 +227,23 @@ export default function InspectorPanel({
   const [hasAnalyzer, setHasAnalyzer] = useState(true)
   const [tsDetail, setTsDetail] = useState<TsDetail | null>(null)
   const [tsDetailLoading, setTsDetailLoading] = useState(false)
+  const [pyDetail, setPyDetail] = useState<{
+    symbol: string
+    line: number
+    column: number
+    hover: string
+    signature: string
+    signatureActiveParam: number | null
+    definitions: { uri: string; range: { start: { line: number; character: number } } }[]
+    typeDefinitions: { uri: string; range: { start: { line: number; character: number } } }[]
+    highlights: number
+    symbolCounts: Record<string, number>
+    references: number
+    diagnostics: number
+  } | null>(null)
+  const [pyDetailLoading, setPyDetailLoading] = useState(false)
   const tsDetailReqRef = useRef(0)
+  const pyDetailReqRef = useRef(0)
   const [tabs, setTabs] = useState<
     { id: string; label: string; value?: string; line?: number; column?: number }[]
   >(() => [{ id: 'overview', label: 'Overview' }])
@@ -241,9 +343,68 @@ export default function InspectorPanel({
   }, [filePath, activeTab, tabs])
 
   useEffect(() => {
+    const activeDetail = tabs.find((tab) => tab.id === activeTab)
+    const detailItem = activeDetail?.value
+    if (!filePath || !detailItem || activeTab === 'overview') {
+      setPyDetail(null)
+      setPyDetailLoading(false)
+      return
+    }
+    const lower = filePath.toLowerCase()
+    if (!/\.py$/.test(lower)) {
+      setPyDetail(null)
+      setPyDetailLoading(false)
+      return
+    }
+    const reqId = pyDetailReqRef.current + 1
+    pyDetailReqRef.current = reqId
+    setPyDetailLoading(true)
+    const fetchDetail = window.loadgic?.getPySymbolDetail?.(
+      filePath,
+      detailItem,
+      activeDetail?.line,
+      activeDetail?.column
+    )
+    if (!fetchDetail) {
+      setPyDetail(null)
+      setPyDetailLoading(false)
+      return
+    }
+    let timedOut = false
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true
+      if (pyDetailReqRef.current === reqId) {
+        setPyDetail(null)
+        setPyDetailLoading(false)
+      }
+    }, 1500)
+    fetchDetail
+      .then((detail) => {
+        if (timedOut || pyDetailReqRef.current !== reqId) return
+        setPyDetail(detail)
+      })
+      .catch(() => {
+        if (timedOut || pyDetailReqRef.current !== reqId) return
+        setPyDetail(null)
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId)
+        if (timedOut || pyDetailReqRef.current !== reqId) return
+        setPyDetailLoading(false)
+      })
+  }, [filePath, activeTab, tabs])
+
+  useEffect(() => {
     if (!filePath) return
     setActiveTab((prev) => (tabs.some((tab) => tab.id === prev) ? prev : 'overview'))
   }, [filePath, tabs])
+
+  useEffect(() => {
+    if (activeTab === 'overview') return
+    const detailItem = tabs.find((tab) => tab.id === activeTab)?.value
+    if (!detailItem) return
+    onDetailFocus?.(detailItem)
+  }, [activeTab, tabs, onDetailFocus])
 
   function handleSelectItem(value: string, line?: number, column?: number) {
     const id = `detail:${value}`
@@ -375,6 +536,7 @@ export default function InspectorPanel({
     }
     const extension =
       filePath?.split('.').pop()?.toUpperCase() ?? 'Unknown'
+    const lowerExt = filePath?.toLowerCase() ?? ''
     return (
       <div className="inspector-body inspector-scroll">
         {tabsBar}
@@ -395,12 +557,15 @@ export default function InspectorPanel({
             </div>
           </div>
         </div>
-        {tsDetailLoading ? (
-          <div className="inspector-detail-hint">Loading TypeScript details…</div>
-        ) : tsDetail ? (
-          <div className="inspector-detail-card">
-            <div className="inspector-detail-label">TypeScript detail</div>
-            <div className="inspector-detail-grid">
+        {/\.(ts|tsx|js|jsx)$/.test(lowerExt) &&
+          (tsDetailLoading ? (
+            <div className="inspector-detail-hint">
+              Loading TypeScript details…
+            </div>
+          ) : tsDetail ? (
+            <div className="inspector-detail-card">
+              <div className="inspector-detail-label">TypeScript detail</div>
+              <div className="inspector-detail-grid">
               <div>
                 <div className="inspector-detail-key">Context</div>
                 <div className="inspector-detail-value">{tsDetail.context}</div>
@@ -516,11 +681,167 @@ export default function InspectorPanel({
               </div>
             ) : null}
           </div>
-        ) : (
-          <div className="inspector-detail-hint">
-            TypeScript details unavailable for this symbol.
-          </div>
-        )}
+          ) : (
+            <div className="inspector-detail-hint">
+              TypeScript details unavailable for this symbol.
+            </div>
+          ))}
+        {/\.py$/.test(lowerExt) ? (
+          pyDetailLoading ? (
+            <div className="inspector-detail-hint">Loading Python details…</div>
+          ) : pyDetail ? (
+            <div className="inspector-detail-card">
+              <div className="inspector-detail-label">Python detail</div>
+              <div className="inspector-detail-grid">
+                <div>
+                  <div className="inspector-detail-key">Hover</div>
+                  <div className="inspector-detail-value">
+                    {pyDetail.hover || '—'}
+                  </div>
+                </div>
+                <div>
+                  <div className="inspector-detail-key">Location</div>
+                  <div className="inspector-detail-value">
+                    Line {pyDetail.line}, Col {pyDetail.column}
+                  </div>
+                </div>
+                <div>
+                  <div className="inspector-detail-key">Symbols</div>
+                  <div className="inspector-detail-value">
+                    {Object.values(pyDetail.symbolCounts ?? {}).reduce(
+                      (sum, value) => sum + value,
+                      0
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="inspector-detail-key">References</div>
+                  <div className="inspector-detail-value">
+                    {pyDetail.references}
+                  </div>
+                </div>
+                <div>
+                  <div className="inspector-detail-key">Highlights</div>
+                  <div className="inspector-detail-value">
+                    {pyDetail.highlights}
+                  </div>
+                </div>
+                <div>
+                  <div className="inspector-detail-key">Diagnostics</div>
+                  <div className="inspector-detail-value">
+                    {pyDetail.diagnostics}
+                  </div>
+                </div>
+              </div>
+              {pyDetail.symbolCounts &&
+              Object.keys(pyDetail.symbolCounts).length ? (
+                <div className="inspector-detail-code">
+                  <div className="inspector-detail-key">Symbol breakdown</div>
+                  {(() => {
+                    const entries = Object.entries(pyDetail.symbolCounts).map(
+                      ([kind, count]) => ({
+                        kind: Number(kind),
+                        label: mapSymbolKind(Number(kind)),
+                        count,
+                      })
+                    )
+                    const total = entries.reduce((sum, item) => sum + item.count, 0)
+                    const top = [...entries].sort((a, b) => b.count - a.count).slice(0, 4)
+                    const summary = top
+                      .map((item) => `${item.count} ${item.label.toLowerCase()}`)
+                      .join(', ')
+                    const grouped: Record<string, number> = {
+                      'Classes/Types': 0,
+                      Functions: 0,
+                      Variables: 0,
+                    }
+                    entries.forEach((item) => {
+                      if ([5, 10, 11, 23, 26].includes(item.kind)) {
+                        grouped['Classes/Types'] += item.count
+                      } else if ([6, 9, 12].includes(item.kind)) {
+                        grouped.Functions += item.count
+                      } else if ([7, 8, 13, 14].includes(item.kind)) {
+                        grouped.Variables += item.count
+                      }
+                    })
+                    return (
+                      <>
+                        <div className="inspector-detail-hint">
+                          {total} symbols detected — top: {summary || '—'}
+                        </div>
+                        <div className="inspector-detail-snippet">
+                          {Object.entries(grouped)
+                            .filter(([, count]) => count > 0)
+                            .map(([label, count]) => `${label}: ${count}`)
+                            .join(' • ') || '—'}
+                        </div>
+                      </>
+                    )
+                  })()}
+                  <div className="inspector-detail-snippet">
+                    {Object.entries(pyDetail.symbolCounts)
+                      .map(([kind, count]) => ({
+                        label: mapSymbolKind(Number(kind)),
+                        count,
+                      }))
+                      .sort((a, b) => b.count - a.count)
+                      .map(({ label, count }) => `${label}: ${count}`)
+                      .join(' • ')}
+                  </div>
+                </div>
+              ) : null}
+              {pyDetail.signature ? (
+                <div className="inspector-detail-code">
+                  <div className="inspector-detail-key">Signature</div>
+                  <div className="inspector-detail-snippet">
+                    {pyDetail.signature}
+                  </div>
+                  {typeof pyDetail.signatureActiveParam === 'number' ? (
+                    <div className="inspector-detail-hint">
+                      Active parameter: {pyDetail.signatureActiveParam + 1}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {pyDetail.definitions?.length ? (
+                <div className="inspector-detail-code">
+                  <div className="inspector-detail-key">Definition</div>
+                  {(() => {
+                    const def = pyDetail.definitions[0]
+                    const loc = formatLspLocation(
+                      def.uri,
+                      def.range.start.line,
+                      def.range.start.character
+                    )
+                    return (
+                      <div className="inspector-detail-snippet">{loc.title}</div>
+                    )
+                  })()}
+                </div>
+              ) : null}
+              {pyDetail.typeDefinitions?.length ? (
+                <div className="inspector-detail-code">
+                  <div className="inspector-detail-key">Type definition</div>
+                  {(() => {
+                    const def = pyDetail.typeDefinitions[0]
+                    const loc = formatLspLocation(
+                      def.uri,
+                      def.range.start.line,
+                      def.range.start.character
+                    )
+                    return (
+                      <div className="inspector-detail-snippet">{loc.title}</div>
+                    )
+                  })()}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="inspector-detail-hint">
+              Python details unavailable for this symbol.
+            </div>
+          )
+        ) : null}
         {onRevealSymbol ? (
           <div className="inspector-detail-actions">
             <button

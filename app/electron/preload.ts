@@ -18,6 +18,12 @@ contextBridge.exposeInMainWorld('loadgic', {
     line?: number,
     column?: number
   ) => ipcRenderer.invoke('ts:detail', filePath, symbol, line, column),
+  getPySymbolDetail: (
+    filePath: string,
+    symbol: string,
+    line?: number,
+    column?: number
+  ) => ipcRenderer.invoke('py:detail', filePath, symbol, line, column),
   onMainMessage: (handler: (message: string) => void) => {
     const listener = (_event: IpcRendererEvent, message: string) => {
       handler(message)
