@@ -19,6 +19,8 @@ type ThemeContextValue = {
   toggleTheme: () => void
   editorTheme: EditorTheme
   setEditorTheme: (theme: EditorTheme) => void
+  highlightColor: string
+  setHighlightColor: (color: string) => void
   logicSettings: LogicSettings
   setLogicSettings: (settings: LogicSettings) => void
   analysisSettings: AnalysisSettings
@@ -47,6 +49,27 @@ function getInitialEditorTheme(): EditorTheme {
   const stored = window.localStorage.getItem('loadgic:editorTheme')
   if (stored && EDITOR_THEMES.some((t) => t.value === stored)) return stored as EditorTheme
   return 'oneDark'
+}
+
+function normalizeHexColor(value: string) {
+  const trimmed = value.trim()
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed.toLowerCase()
+  return '#3b82f6'
+}
+
+function getInitialHighlightColor() {
+  if (typeof window === 'undefined') return '#3b82f6'
+  const stored = window.localStorage.getItem('loadgic:highlightColor')
+  if (stored) return normalizeHexColor(stored)
+  return '#3b82f6'
+}
+
+function hexToRgb(value: string) {
+  const normalized = normalizeHexColor(value).slice(1)
+  const r = Number.parseInt(normalized.slice(0, 2), 16)
+  const g = Number.parseInt(normalized.slice(2, 4), 16)
+  const b = Number.parseInt(normalized.slice(4, 6), 16)
+  return `${r}, ${g}, ${b}`
 }
 
 function getInitialLogicSettings(): LogicSettings {
@@ -91,6 +114,9 @@ function getInitialAnalysisSettings(): AnalysisSettings {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>(getInitialTheme)
   const [editorTheme, setEditorTheme] = useState<EditorTheme>(getInitialEditorTheme)
+  const [highlightColor, setHighlightColor] = useState<string>(
+    getInitialHighlightColor
+  )
   const [logicSettings, setLogicSettings] = useState<LogicSettings>(
     getInitialLogicSettings
   )
@@ -106,6 +132,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     window.localStorage.setItem('loadgic:editorTheme', editorTheme)
   }, [editorTheme])
+
+  useEffect(() => {
+    const normalized = normalizeHexColor(highlightColor)
+    window.localStorage.setItem('loadgic:highlightColor', normalized)
+    document.documentElement.style.setProperty(
+      '--inspector-highlight-rgb',
+      hexToRgb(normalized)
+    )
+  }, [highlightColor])
 
   useEffect(() => {
     window.localStorage.setItem('loadgic:logicSettings', JSON.stringify(logicSettings))
@@ -129,6 +164,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         if (event.newValue && EDITOR_THEMES.some((t) => t.value === event.newValue)) {
           setEditorTheme(event.newValue as EditorTheme)
         }
+      }
+      if (event.key === 'loadgic:highlightColor' && event.newValue) {
+        setHighlightColor(normalizeHexColor(event.newValue))
       }
       if (event.key === 'loadgic:logicSettings' && event.newValue) {
         try {
@@ -165,12 +203,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       toggleTheme: () => setTheme((t) => (t === 'dark' ? 'light' : 'dark')),
       editorTheme,
       setEditorTheme,
+      highlightColor,
+      setHighlightColor,
       logicSettings,
       setLogicSettings,
       analysisSettings,
       setAnalysisSettings,
     }),
-    [theme, editorTheme, logicSettings, analysisSettings]
+    [theme, editorTheme, highlightColor, logicSettings, analysisSettings]
   )
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>

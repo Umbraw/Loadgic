@@ -8,6 +8,7 @@ type Props = {
   filePath: string | null
   fileContent: FileContent | null
   onRevealSymbol?: (symbol: string) => void
+  externalDetail?: { value: string; nonce: number } | null
 }
 
 // Section component displaying categorized items
@@ -104,12 +105,17 @@ export default function InspectorPanel({
   filePath,
   fileContent,
   onRevealSymbol,
+  externalDetail,
 }: Props) {
   const { analysisSettings } = useTheme()
   const workerRef = useRef<Worker | null>(null)
   const requestIdRef = useRef(0)
   const [outline, setOutline] = useState<Outline | null>(null)
   const [hasAnalyzer, setHasAnalyzer] = useState(true)
+  const [tabs, setTabs] = useState<{ id: string; label: string; value?: string }[]>(
+    () => [{ id: 'overview', label: 'Overview' }]
+  )
+  const [activeTab, setActiveTab] = useState('overview')
 
   useEffect(() => {
     const worker = new Worker(
@@ -151,6 +157,91 @@ export default function InspectorPanel({
     })
   }, [filePath, fileContent, analysisSettings])
 
+  useEffect(() => {
+    if (!filePath) return
+    setActiveTab((prev) => (tabs.some((tab) => tab.id === prev) ? prev : 'overview'))
+  }, [filePath, tabs])
+
+  function handleSelectItem(value: string) {
+    const id = `detail:${value}`
+    setTabs((prev) => {
+      if (prev.some((tab) => tab.id === id)) return prev
+      return [...prev, { id, label: value, value }]
+    })
+    setActiveTab(id)
+  }
+
+  function closeTab(tabId: string) {
+    setTabs((prev) => {
+      const next = prev.filter((t) => t.id !== tabId)
+      setActiveTab(next.find((t) => t.id === activeTab) ? activeTab : 'overview')
+      return next
+    })
+  }
+
+  function handleTabsWheel(event: React.WheelEvent<HTMLDivElement>) {
+    const container = event.currentTarget
+    if (container.scrollWidth <= container.clientWidth) return
+    const delta =
+      Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY
+    if (delta === 0) return
+    event.preventDefault()
+    container.scrollLeft += delta
+  }
+
+  useEffect(() => {
+    if (!externalDetail) return
+    const value = externalDetail.value
+    if (!value) return
+    setTabs((prev) => {
+      const selectorId = 'selector'
+      const existing = prev.find((tab) => tab.id === selectorId)
+      if (existing) {
+        return prev.map((tab) =>
+          tab.id === selectorId ? { ...tab, value } : tab
+        )
+      }
+      return [...prev, { id: selectorId, label: 'Selector', value }]
+    })
+    setActiveTab('selector')
+  }, [externalDetail?.nonce])
+
+  const orderedTabs = [
+    ...tabs.filter((tab) => tab.id === 'overview'),
+    ...tabs.filter((tab) => tab.id === 'selector'),
+    ...tabs.filter((tab) => tab.id !== 'overview' && tab.id !== 'selector'),
+  ]
+
+  const tabsBar = (
+    <div className="inspector-tabs" onWheel={handleTabsWheel}>
+      {orderedTabs.map((tab) => (
+        <button
+          key={tab.id}
+          className={`inspector-tab${tab.id === activeTab ? ' active' : ''}`}
+          data-tab={tab.id}
+          type="button"
+          onClick={() => setActiveTab(tab.id)}
+          title={tab.label}
+        >
+          <span className="inspector-tab-label">{tab.label}</span>
+          {tab.id !== 'overview' ? (
+            <span
+              className="inspector-tab-close"
+              role="button"
+              aria-label="Close tab"
+              onClick={(event) => {
+                event.stopPropagation()
+                closeTab(tab.id)
+              }}
+            >
+              ✕
+            </span>
+          ) : null}
+        </button>
+      ))}
+    </div>
+  )
+
   if (!filePath) {
     return <div className="inspector-body">No selection</div>
   }
@@ -179,10 +270,48 @@ export default function InspectorPanel({
     )
   }
 
+  if (activeTab !== 'overview') {
+    const detailItem = tabs.find((tab) => tab.id === activeTab)?.value
+    if (!detailItem) {
+      return (
+        <div className="inspector-body">
+          <div className="inspector-muted">No detail available.</div>
+        </div>
+      )
+    }
+    return (
+      <div className="inspector-body inspector-scroll">
+        {tabsBar}
+        <div className="inspector-detail-header">
+          <span className="inspector-detail-title">Detail</span>
+        </div>
+        <div className="inspector-detail-card">
+          <div className="inspector-detail-label">Selected element</div>
+          <div className="inspector-detail-value">{detailItem}</div>
+          <div className="inspector-detail-hint">
+            This detail page will be enriched with metadata, docs and references.
+          </div>
+        </div>
+        {onRevealSymbol ? (
+          <div className="inspector-detail-actions">
+            <button
+              className="inspector-detail-action"
+              type="button"
+              onClick={() => onRevealSymbol(detailItem)}
+            >
+              Reveal in code
+            </button>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
+
   if (outline.jsonOverview) {
     const overview = outline.jsonOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">JSON Overview</div>
           <div className="inspector-summary-grid">
@@ -228,36 +357,36 @@ export default function InspectorPanel({
             </div>
           </div>
         </div>
-        <Section title="Keys" items={overview.keys} onSelectItem={onRevealSymbol} />
+        <Section title="Keys" items={overview.keys} onSelectItem={handleSelectItem} />
         <Section
           title="Objects"
           items={overview.objectPaths}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Arrays"
           items={overview.arrayPaths}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="String values"
           items={overview.stringValues}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Number values"
           items={overview.numberValues}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Boolean values"
           items={overview.booleanValues}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Null paths"
           items={overview.nullPaths}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
       </div>
     )
@@ -267,6 +396,7 @@ export default function InspectorPanel({
     const overview = outline.cOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">C Overview</div>
           <div className="inspector-summary-grid">
@@ -299,28 +429,28 @@ export default function InspectorPanel({
         <Section
           title="Includes"
           items={overview.includes}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Structs/Classes"
           items={overview.structs}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Enums" items={overview.enums} onSelectItem={onRevealSymbol} />
+        <Section title="Enums" items={overview.enums} onSelectItem={handleSelectItem} />
         <Section
           title="Typedefs"
           items={overview.typedefs}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Functions"
           items={overview.functions}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Globals"
           items={overview.globals}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
       </div>
     )
@@ -330,6 +460,7 @@ export default function InspectorPanel({
     const overview = outline.cppOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">C++ Overview</div>
           <div className="inspector-summary-grid">
@@ -372,30 +503,30 @@ export default function InspectorPanel({
         <Section
           title="Includes"
           items={overview.includes}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Namespaces"
           items={overview.namespaces}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Classes" items={overview.classes} onSelectItem={onRevealSymbol} />
-        <Section title="Structs" items={overview.structs} onSelectItem={onRevealSymbol} />
-        <Section title="Enums" items={overview.enums} onSelectItem={onRevealSymbol} />
+        <Section title="Classes" items={overview.classes} onSelectItem={handleSelectItem} />
+        <Section title="Structs" items={overview.structs} onSelectItem={handleSelectItem} />
+        <Section title="Enums" items={overview.enums} onSelectItem={handleSelectItem} />
         <Section
           title="Typedefs"
           items={overview.typedefs}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Functions"
           items={overview.functions}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Globals"
           items={overview.globals}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
       </div>
     )
@@ -405,6 +536,7 @@ export default function InspectorPanel({
     const overview = outline.csOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">C# Overview</div>
           <div className="inspector-summary-grid">
@@ -446,22 +578,22 @@ export default function InspectorPanel({
             </div>
           </div>
         </div>
-        <Section title="Usings" items={overview.usings} onSelectItem={onRevealSymbol} />
+        <Section title="Usings" items={overview.usings} onSelectItem={handleSelectItem} />
         <Section
           title="Namespaces"
           items={overview.namespaces}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Classes" items={overview.classes} onSelectItem={onRevealSymbol} />
-        <Section title="Structs" items={overview.structs} onSelectItem={onRevealSymbol} />
+        <Section title="Classes" items={overview.classes} onSelectItem={handleSelectItem} />
+        <Section title="Structs" items={overview.structs} onSelectItem={handleSelectItem} />
         <Section
           title="Interfaces"
           items={overview.interfaces}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Enums" items={overview.enums} onSelectItem={onRevealSymbol} />
-        <Section title="Methods" items={overview.methods} onSelectItem={onRevealSymbol} />
-        <Section title="Members" items={overview.members} onSelectItem={onRevealSymbol} />
+        <Section title="Enums" items={overview.enums} onSelectItem={handleSelectItem} />
+        <Section title="Methods" items={overview.methods} onSelectItem={handleSelectItem} />
+        <Section title="Members" items={overview.members} onSelectItem={handleSelectItem} />
       </div>
     )
   }
@@ -470,6 +602,7 @@ export default function InspectorPanel({
     const overview = outline.goOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">Go Overview</div>
           <div className="inspector-summary-grid">
@@ -514,26 +647,26 @@ export default function InspectorPanel({
         <Section
           title="Packages"
           items={overview.packages}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Imports" items={overview.imports} onSelectItem={onRevealSymbol} />
-        <Section title="Structs" items={overview.structs} onSelectItem={onRevealSymbol} />
+        <Section title="Imports" items={overview.imports} onSelectItem={handleSelectItem} />
+        <Section title="Structs" items={overview.structs} onSelectItem={handleSelectItem} />
         <Section
           title="Interfaces"
           items={overview.interfaces}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Types" items={overview.types} onSelectItem={onRevealSymbol} />
+        <Section title="Types" items={overview.types} onSelectItem={handleSelectItem} />
         <Section
           title="Functions"
           items={overview.functions}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Methods" items={overview.methods} onSelectItem={onRevealSymbol} />
+        <Section title="Methods" items={overview.methods} onSelectItem={handleSelectItem} />
         <Section
           title="Variables"
           items={overview.variables}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
       </div>
     )
@@ -543,6 +676,7 @@ export default function InspectorPanel({
     const overview = outline.javaOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">Java Overview</div>
           <div className="inspector-summary-grid">
@@ -583,18 +717,18 @@ export default function InspectorPanel({
         <Section
           title="Packages"
           items={overview.packageName}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Imports" items={overview.imports} onSelectItem={onRevealSymbol} />
-        <Section title="Classes" items={overview.classes} onSelectItem={onRevealSymbol} />
+        <Section title="Imports" items={overview.imports} onSelectItem={handleSelectItem} />
+        <Section title="Classes" items={overview.classes} onSelectItem={handleSelectItem} />
         <Section
           title="Interfaces"
           items={overview.interfaces}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Enums" items={overview.enums} onSelectItem={onRevealSymbol} />
-        <Section title="Methods" items={overview.methods} onSelectItem={onRevealSymbol} />
-        <Section title="Fields" items={overview.fields} onSelectItem={onRevealSymbol} />
+        <Section title="Enums" items={overview.enums} onSelectItem={handleSelectItem} />
+        <Section title="Methods" items={overview.methods} onSelectItem={handleSelectItem} />
+        <Section title="Fields" items={overview.fields} onSelectItem={handleSelectItem} />
       </div>
     )
   }
@@ -603,6 +737,7 @@ export default function InspectorPanel({
     const overview = outline.jsOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">JavaScript Overview</div>
           <div className="inspector-summary-grid">
@@ -643,18 +778,18 @@ export default function InspectorPanel({
         <Section
           title="Import sources"
           items={overview.importSources}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Imported symbols"
           items={overview.importBindings}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Exports" items={overview.exportNames} onSelectItem={onRevealSymbol} />
-        <Section title="Classes" items={overview.classes} onSelectItem={onRevealSymbol} />
-        <Section title="Functions" items={overview.functions} onSelectItem={onRevealSymbol} />
-        <Section title="Hooks" items={overview.hooks} onSelectItem={onRevealSymbol} />
-        <Section title="Variables" items={overview.variables} onSelectItem={onRevealSymbol} />
+        <Section title="Exports" items={overview.exportNames} onSelectItem={handleSelectItem} />
+        <Section title="Classes" items={overview.classes} onSelectItem={handleSelectItem} />
+        <Section title="Functions" items={overview.functions} onSelectItem={handleSelectItem} />
+        <Section title="Hooks" items={overview.hooks} onSelectItem={handleSelectItem} />
+        <Section title="Variables" items={overview.variables} onSelectItem={handleSelectItem} />
       </div>
     )
   }
@@ -663,6 +798,7 @@ export default function InspectorPanel({
     const overview = outline.jsxOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">JSX Overview</div>
           <div className="inspector-summary-grid">
@@ -709,23 +845,23 @@ export default function InspectorPanel({
         <Section
           title="Import sources"
           items={overview.importSources}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Imported symbols"
           items={overview.importBindings}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Exports" items={overview.exportNames} onSelectItem={onRevealSymbol} />
+        <Section title="Exports" items={overview.exportNames} onSelectItem={handleSelectItem} />
         <Section
           title="Components"
           items={overview.components}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Classes" items={overview.classes} onSelectItem={onRevealSymbol} />
-        <Section title="Functions" items={overview.functions} onSelectItem={onRevealSymbol} />
-        <Section title="Hooks" items={overview.hooks} onSelectItem={onRevealSymbol} />
-        <Section title="Variables" items={overview.variables} onSelectItem={onRevealSymbol} />
+        <Section title="Classes" items={overview.classes} onSelectItem={handleSelectItem} />
+        <Section title="Functions" items={overview.functions} onSelectItem={handleSelectItem} />
+        <Section title="Hooks" items={overview.hooks} onSelectItem={handleSelectItem} />
+        <Section title="Variables" items={overview.variables} onSelectItem={handleSelectItem} />
       </div>
     )
   }
@@ -734,6 +870,7 @@ export default function InspectorPanel({
     const overview = outline.mdOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">Markdown Overview</div>
           <div className="inspector-summary-grid">
@@ -757,14 +894,14 @@ export default function InspectorPanel({
             </div>
           </div>
         </div>
-        <Section title="Headings" items={overview.headings} onSelectItem={onRevealSymbol} />
-        <Section title="Links" items={overview.links} onSelectItem={onRevealSymbol} />
+        <Section title="Headings" items={overview.headings} onSelectItem={handleSelectItem} />
+        <Section title="Links" items={overview.links} onSelectItem={handleSelectItem} />
         <Section
           title="Code blocks"
           items={overview.codeBlocks}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Lists" items={overview.lists} onSelectItem={onRevealSymbol} />
+        <Section title="Lists" items={overview.lists} onSelectItem={handleSelectItem} />
       </div>
     )
   }
@@ -773,6 +910,7 @@ export default function InspectorPanel({
     const overview = outline.phpOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">PHP Overview</div>
           <div className="inspector-summary-grid">
@@ -820,26 +958,26 @@ export default function InspectorPanel({
             </div>
           </div>
         </div>
-        <Section title="Namespaces" items={overview.namespaces} onSelectItem={onRevealSymbol} />
-        <Section title="Uses" items={overview.uses} onSelectItem={onRevealSymbol} />
-        <Section title="Classes" items={overview.classes} onSelectItem={onRevealSymbol} />
-        <Section title="Traits" items={overview.traits} onSelectItem={onRevealSymbol} />
+        <Section title="Namespaces" items={overview.namespaces} onSelectItem={handleSelectItem} />
+        <Section title="Uses" items={overview.uses} onSelectItem={handleSelectItem} />
+        <Section title="Classes" items={overview.classes} onSelectItem={handleSelectItem} />
+        <Section title="Traits" items={overview.traits} onSelectItem={handleSelectItem} />
         <Section
           title="Interfaces"
           items={overview.interfaces}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Functions" items={overview.functions} onSelectItem={onRevealSymbol} />
-        <Section title="Methods" items={overview.methods} onSelectItem={onRevealSymbol} />
+        <Section title="Functions" items={overview.functions} onSelectItem={handleSelectItem} />
+        <Section title="Methods" items={overview.methods} onSelectItem={handleSelectItem} />
         <Section
           title="Properties"
           items={overview.properties}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Constants"
           items={overview.constants}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
       </div>
     )
@@ -849,6 +987,7 @@ export default function InspectorPanel({
     const overview = outline.pyOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">Python Overview</div>
           <div className="inspector-summary-grid">
@@ -884,20 +1023,20 @@ export default function InspectorPanel({
             </div>
           </div>
         </div>
-        <Section title="Imports" items={overview.imports} onSelectItem={onRevealSymbol} />
+        <Section title="Imports" items={overview.imports} onSelectItem={handleSelectItem} />
         <Section
           title="From imports"
           items={overview.fromImports}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Classes" items={overview.classes} onSelectItem={onRevealSymbol} />
-        <Section title="Functions" items={overview.functions} onSelectItem={onRevealSymbol} />
-        <Section title="Methods" items={overview.methods} onSelectItem={onRevealSymbol} />
-        <Section title="Variables" items={overview.variables} onSelectItem={onRevealSymbol} />
+        <Section title="Classes" items={overview.classes} onSelectItem={handleSelectItem} />
+        <Section title="Functions" items={overview.functions} onSelectItem={handleSelectItem} />
+        <Section title="Methods" items={overview.methods} onSelectItem={handleSelectItem} />
+        <Section title="Variables" items={overview.variables} onSelectItem={handleSelectItem} />
         <Section
           title="Decorators"
           items={overview.decorators}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
       </div>
     )
@@ -907,6 +1046,7 @@ export default function InspectorPanel({
     const overview = outline.rbOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">Ruby Overview</div>
           <div className="inspector-summary-grid">
@@ -939,16 +1079,16 @@ export default function InspectorPanel({
         <Section
           title="Requires"
           items={overview.requires}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Modules" items={overview.modules} onSelectItem={onRevealSymbol} />
-        <Section title="Classes" items={overview.classes} onSelectItem={onRevealSymbol} />
-        <Section title="Methods" items={overview.methods} onSelectItem={onRevealSymbol} />
-        <Section title="Variables" items={overview.variables} onSelectItem={onRevealSymbol} />
+        <Section title="Modules" items={overview.modules} onSelectItem={handleSelectItem} />
+        <Section title="Classes" items={overview.classes} onSelectItem={handleSelectItem} />
+        <Section title="Methods" items={overview.methods} onSelectItem={handleSelectItem} />
+        <Section title="Variables" items={overview.variables} onSelectItem={handleSelectItem} />
         <Section
           title="Constants"
           items={overview.constants}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
       </div>
     )
@@ -958,6 +1098,7 @@ export default function InspectorPanel({
     const overview = outline.rsOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">Rust Overview</div>
           <div className="inspector-summary-grid">
@@ -999,18 +1140,18 @@ export default function InspectorPanel({
             </div>
           </div>
         </div>
-        <Section title="Uses" items={overview.uses} onSelectItem={onRevealSymbol} />
-        <Section title="Modules" items={overview.modules} onSelectItem={onRevealSymbol} />
-        <Section title="Structs" items={overview.structs} onSelectItem={onRevealSymbol} />
-        <Section title="Enums" items={overview.enums} onSelectItem={onRevealSymbol} />
-        <Section title="Traits" items={overview.traits} onSelectItem={onRevealSymbol} />
-        <Section title="Impls" items={overview.impls} onSelectItem={onRevealSymbol} />
-        <Section title="Functions" items={overview.functions} onSelectItem={onRevealSymbol} />
-        <Section title="Types" items={overview.types} onSelectItem={onRevealSymbol} />
+        <Section title="Uses" items={overview.uses} onSelectItem={handleSelectItem} />
+        <Section title="Modules" items={overview.modules} onSelectItem={handleSelectItem} />
+        <Section title="Structs" items={overview.structs} onSelectItem={handleSelectItem} />
+        <Section title="Enums" items={overview.enums} onSelectItem={handleSelectItem} />
+        <Section title="Traits" items={overview.traits} onSelectItem={handleSelectItem} />
+        <Section title="Impls" items={overview.impls} onSelectItem={handleSelectItem} />
+        <Section title="Functions" items={overview.functions} onSelectItem={handleSelectItem} />
+        <Section title="Types" items={overview.types} onSelectItem={handleSelectItem} />
         <Section
           title="Constants"
           items={overview.constants}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
       </div>
     )
@@ -1020,6 +1161,7 @@ export default function InspectorPanel({
     const overview = outline.tsOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">TypeScript Overview</div>
           <div className="inspector-summary-grid">
@@ -1068,20 +1210,20 @@ export default function InspectorPanel({
         <Section
           title="Import sources"
           items={overview.importSources}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Imported symbols"
           items={overview.importBindings}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Exports" items={overview.exportNames} onSelectItem={onRevealSymbol} />
-        <Section title="Interfaces" items={overview.interfaces} onSelectItem={onRevealSymbol} />
-        <Section title="Types" items={overview.types} onSelectItem={onRevealSymbol} />
-        <Section title="Enums" items={overview.enums} onSelectItem={onRevealSymbol} />
-        <Section title="Classes" items={overview.classes} onSelectItem={onRevealSymbol} />
-        <Section title="Functions" items={overview.functions} onSelectItem={onRevealSymbol} />
-        <Section title="Variables" items={overview.variables} onSelectItem={onRevealSymbol} />
+        <Section title="Exports" items={overview.exportNames} onSelectItem={handleSelectItem} />
+        <Section title="Interfaces" items={overview.interfaces} onSelectItem={handleSelectItem} />
+        <Section title="Types" items={overview.types} onSelectItem={handleSelectItem} />
+        <Section title="Enums" items={overview.enums} onSelectItem={handleSelectItem} />
+        <Section title="Classes" items={overview.classes} onSelectItem={handleSelectItem} />
+        <Section title="Functions" items={overview.functions} onSelectItem={handleSelectItem} />
+        <Section title="Variables" items={overview.variables} onSelectItem={handleSelectItem} />
       </div>
     )
   }
@@ -1090,6 +1232,7 @@ export default function InspectorPanel({
     const overview = outline.tsxOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">TSX Overview</div>
           <div className="inspector-summary-grid">
@@ -1148,30 +1291,30 @@ export default function InspectorPanel({
         <Section
           title="Import sources"
           items={overview.importSources}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Imported symbols"
           items={overview.importBindings}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Exports" items={overview.exportNames} onSelectItem={onRevealSymbol} />
+        <Section title="Exports" items={overview.exportNames} onSelectItem={handleSelectItem} />
         <Section
           title="Components"
           items={overview.components}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
         <Section
           title="Interfaces"
           items={overview.interfaces}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Types" items={overview.types} onSelectItem={onRevealSymbol} />
-        <Section title="Enums" items={overview.enums} onSelectItem={onRevealSymbol} />
-        <Section title="Classes" items={overview.classes} onSelectItem={onRevealSymbol} />
-        <Section title="Functions" items={overview.functions} onSelectItem={onRevealSymbol} />
-        <Section title="Hooks" items={overview.hooks} onSelectItem={onRevealSymbol} />
-        <Section title="Variables" items={overview.variables} onSelectItem={onRevealSymbol} />
+        <Section title="Types" items={overview.types} onSelectItem={handleSelectItem} />
+        <Section title="Enums" items={overview.enums} onSelectItem={handleSelectItem} />
+        <Section title="Classes" items={overview.classes} onSelectItem={handleSelectItem} />
+        <Section title="Functions" items={overview.functions} onSelectItem={handleSelectItem} />
+        <Section title="Hooks" items={overview.hooks} onSelectItem={handleSelectItem} />
+        <Section title="Variables" items={overview.variables} onSelectItem={handleSelectItem} />
       </div>
     )
   }
@@ -1180,6 +1323,7 @@ export default function InspectorPanel({
     const overview = outline.ymlOverview
     return (
       <div className="inspector-body inspector-scroll">
+        {tabsBar}
         <div className="inspector-summary">
           <div className="inspector-summary-title">YAML Overview</div>
           <div className="inspector-summary-grid">
@@ -1205,17 +1349,17 @@ export default function InspectorPanel({
             </div>
           </div>
         </div>
-        <Section title="Keys" items={overview.keys} onSelectItem={onRevealSymbol} />
+        <Section title="Keys" items={overview.keys} onSelectItem={handleSelectItem} />
         <Section
           title="Objects"
           items={overview.objectPaths}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
-        <Section title="Arrays" items={overview.arrayPaths} onSelectItem={onRevealSymbol} />
+        <Section title="Arrays" items={overview.arrayPaths} onSelectItem={handleSelectItem} />
         <Section
           title="Values"
           items={overview.scalarValues}
-          onSelectItem={onRevealSymbol}
+          onSelectItem={handleSelectItem}
         />
       </div>
     )
@@ -1224,6 +1368,7 @@ export default function InspectorPanel({
   // Render inspector panel with file outline
   return (
     <div className="inspector-body inspector-scroll">
+        {tabsBar}
       <div className="inspector-summary">
         <div className="inspector-summary-title">Summary</div>
         <div className="inspector-summary-grid">
@@ -1280,30 +1425,30 @@ export default function InspectorPanel({
       <Section
         title="Import sources"
         items={outline.importSources}
-        onSelectItem={onRevealSymbol}
+        onSelectItem={handleSelectItem}
       />
       <Section
         title="Imported symbols"
         items={outline.importBindings}
-        onSelectItem={onRevealSymbol}
+        onSelectItem={handleSelectItem}
       />
-      <Section title="Exports" items={outline.exports} onSelectItem={onRevealSymbol} />
+      <Section title="Exports" items={outline.exports} onSelectItem={handleSelectItem} />
       <Section
         title="Export sources"
         items={outline.exportSources}
-        onSelectItem={onRevealSymbol}
+        onSelectItem={handleSelectItem}
       />
-      <Section title="Classes" items={outline.classes} onSelectItem={onRevealSymbol} />
-      <Section title="Functions" items={outline.functions} onSelectItem={onRevealSymbol} />
-      <Section title="Hooks" items={outline.hooks} onSelectItem={onRevealSymbol} />
+      <Section title="Classes" items={outline.classes} onSelectItem={handleSelectItem} />
+      <Section title="Functions" items={outline.functions} onSelectItem={handleSelectItem} />
+      <Section title="Hooks" items={outline.hooks} onSelectItem={handleSelectItem} />
       <Section
         title="Interfaces"
         items={outline.interfaces}
-        onSelectItem={onRevealSymbol}
+        onSelectItem={handleSelectItem}
       />
-      <Section title="Types" items={outline.types} onSelectItem={onRevealSymbol} />
-      <Section title="Enums" items={outline.enums} onSelectItem={onRevealSymbol} />
-      <Section title="Variables" items={outline.variables} onSelectItem={onRevealSymbol} />
+      <Section title="Types" items={outline.types} onSelectItem={handleSelectItem} />
+      <Section title="Enums" items={outline.enums} onSelectItem={handleSelectItem} />
+      <Section title="Variables" items={outline.variables} onSelectItem={handleSelectItem} />
     </div>
   )
 }

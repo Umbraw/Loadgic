@@ -39,6 +39,7 @@ This project is built with:
 * File viewer with syntax highlighting (CodeMirror)  
 * Binary files are detected and skipped in the viewer  
 * Inspector: structural analysis for multiple languages (JS/TS, Python, Go, Rust, Java, C/C++, C#, PHP, Ruby, JSON, YAML)  
+* Inspector detail tabs: click any symbol to open a dedicated detail view (multiple detail tabs supported)  
 * Markdown/YAML overview (text-based fallback without WASM)  
 
 ---

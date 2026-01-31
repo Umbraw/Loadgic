@@ -39,8 +39,14 @@ function clamp(value: number, min: number, max: number) {
 
 // SettingsPage component
 export default function SettingsPage() {
-  const { logicSettings, setLogicSettings, analysisSettings, setAnalysisSettings } =
-    useTheme()
+  const {
+    logicSettings,
+    setLogicSettings,
+    analysisSettings,
+    setAnalysisSettings,
+    highlightColor,
+    setHighlightColor,
+  } = useTheme()
 
   const coreLanguages = LANGUAGE_DEFINITIONS.filter((language) =>
     CORE_LANGUAGE_IDS.includes(language.id)
@@ -82,6 +88,15 @@ export default function SettingsPage() {
           <label className="settings-row">
             <span>Syntax highlighting</span>
             <EditorThemeSelect />
+          </label>
+          <label className="settings-row">
+            <span>Search highlight color</span>
+            <input
+              type="color"
+              value={highlightColor}
+              onChange={(event) => setHighlightColor(event.target.value)}
+              aria-label="Search highlight color"
+            />
           </label>
         </div>
 

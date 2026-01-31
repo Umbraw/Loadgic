@@ -41,6 +41,10 @@ function App() {
   const [highlightTotal, setHighlightTotal] = useState(0)
   const [highlightIndex, setHighlightIndex] = useState<number | null>(null)
   const [highlightRequest, setHighlightRequest] = useState(0)
+  const [inspectorExternalDetail, setInspectorExternalDetail] = useState<{
+    value: string
+    nonce: number
+  } | null>(null)
   const [inspectorSearch, setInspectorSearch] = useState('')
   const settingsMenuRef = useRef<HTMLDivElement | null>(null)
   const suppressContextCloseRef = useRef(false)
@@ -475,6 +479,16 @@ function App() {
     setActiveView('files')
   }
 
+  function handleCodeSymbolSelect(symbol: string) {
+    const trimmed = symbol.trim()
+    if (!trimmed) return
+    handleRevealSymbol(trimmed)
+    setInspectorExternalDetail({
+      value: trimmed,
+      nonce: Date.now(),
+    })
+  }
+
   useEffect(() => {
     setHighlightIndex(null)
   }, [highlightQuery])
@@ -636,7 +650,7 @@ function App() {
                     occurrenceIndex={highlightIndex}
                     focusRequest={highlightRequest}
                     onOccurrencesChange={setHighlightTotal}
-                    onSymbolSelect={handleRevealSymbol}
+                    onSymbolSelect={handleCodeSymbolSelect}
                   />
                 ) : selectedFileContent.kind === 'image' ? (
                   <div className="image-viewer">
@@ -740,6 +754,7 @@ function App() {
             filePath={selectedFilePath}
             fileContent={selectedFileContent}
             onRevealSymbol={handleRevealSymbol}
+            externalDetail={inspectorExternalDetail}
           />
         </aside>
         {isInspectorOpen ? (
