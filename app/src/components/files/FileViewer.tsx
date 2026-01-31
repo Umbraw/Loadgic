@@ -253,16 +253,18 @@ export default function FileViewer({
 
   useEffect(() => {
     if (!editorView || !onSymbolSelect) return
+    const view = editorView
+    const onSelect = onSymbolSelect
 
     function handleModifierClick(event: MouseEvent) {
       const isModifierPressed = event.ctrlKey || event.metaKey
       if (!isModifierPressed || event.button !== 0) return
-      const pos = editorView.posAtCoords({
+      const pos = view.posAtCoords({
         x: event.clientX,
         y: event.clientY,
       })
       if (pos == null) return
-      const { state } = editorView
+      const { state } = view
       const selection = state.selection
       for (const range of selection.ranges) {
         if (
@@ -274,18 +276,18 @@ export default function FileViewer({
           const selectedText = state.sliceDoc(range.from, range.to).trim()
           if (selectedText.length) {
             event.preventDefault()
-            onSymbolSelect(selectedText)
+            onSelect(selectedText)
             return
           }
         }
       }
-      const symbol = getSymbolAtPosition(editorView.state.doc, pos)
+      const symbol = getSymbolAtPosition(view.state.doc, pos)
       if (!symbol) return
       event.preventDefault()
-      onSymbolSelect(symbol)
+      onSelect(symbol)
     }
 
-    const dom = editorView.dom
+    const dom = view.dom
     dom.addEventListener('mousedown', handleModifierClick)
     return () => {
       dom.removeEventListener('mousedown', handleModifierClick)

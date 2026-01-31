@@ -520,6 +520,7 @@ button.inspector-chip:hover,
   font-size: 12px;
 }
 
+
 .inspector-search::placeholder {
   color: var(--text-muted);
 }
