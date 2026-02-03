@@ -550,6 +550,19 @@ function App() {
     setActiveView('files')
   }
 
+  function handleStepOccurrence(direction: 'next' | 'prev') {
+    if (!highlightQuery || !highlightQuery.trim() || highlightTotal <= 0) return
+    setHighlightIndex((prev) => {
+      if (prev == null) return 0
+      if (direction === 'next') {
+        return (prev + 1) % highlightTotal
+      }
+      return (prev - 1 + highlightTotal) % highlightTotal
+    })
+    setHighlightRequest((prev) => prev + 1)
+    setActiveView('files')
+  }
+
   // Copy file path to clipboard
   async function copyPathToClipboard(filePath: string) {
     if (!filePath) return
@@ -806,6 +819,9 @@ function App() {
             fileContent={selectedFileContent}
             onRevealSymbol={handleRevealSymbol}
             onDetailFocus={handleDetailFocus}
+            occurrenceIndex={highlightIndex}
+            occurrenceTotal={highlightTotal}
+            onStepOccurrence={handleStepOccurrence}
             externalDetail={inspectorExternalDetail}
           />
         </aside>

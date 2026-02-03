@@ -346,9 +346,121 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-panel);
-  padding: 12px;
+  padding: 0;
+  min-width: 0;
 }
 
+.inspector-detail-card[open] .inspector-detail-caret {
+  transform: rotate(90deg);
+}
+
+.inspector-detail-card-header {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 12px;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.inspector-detail-card-header::-webkit-details-marker {
+  display: none;
+}
+
+.inspector-detail-card-header::marker {
+  content: "";
+}
+
+.inspector-detail-body {
+  padding: 0 12px 12px;
+  min-width: 0;
+}
+
+.inspector-detail-caret {
+  width: 0;
+  height: 0;
+  border-left: 6px solid var(--text-muted);
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+}
+
+.inspector-detail-table {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.inspector-detail-table-head,
+.inspector-detail-table-row {
+  display: grid;
+  grid-template-columns: clamp(64px, 24%, 140px) minmax(0, 1fr);
+  gap: 6px;
+  padding: 8px 8px;
+  font-size: 12px;
+  max-width: 100%;
+  overflow: hidden;
+  min-width: 0;
+  box-sizing: border-box;
+  justify-items: start;
+  align-items: start;
+}
+
+.inspector-detail-table-head {
+  background: var(--bg-alt);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+}
+
+.inspector-detail-table-row {
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  word-break: break-word;
+}
+
+@media (max-width: 900px) {
+  .inspector-detail-table-head,
+  .inspector-detail-table-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+    padding: 6px 8px;
+  }
+
+  .inspector-detail-table-head {
+    display: none;
+  }
+
+  .inspector-detail-table-row span:first-child {
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 2px;
+    margin-left: 0;
+  }
+
+.inspector-detail-table-row span:last-child {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  overflow: visible;
+  text-overflow: unset;
+  margin-left: 0;
+  min-width: 0;
+  width: 100%;
+}
+}
 .inspector-detail-label {
   font-size: 11px;
   color: var(--text-muted);

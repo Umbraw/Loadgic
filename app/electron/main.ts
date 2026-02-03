@@ -462,6 +462,28 @@ function getModifierNames(node: ts.Node) {
   return modifiers.map((modifier) => ts.SyntaxKind[modifier.kind])
 }
 
+function getJsDoc(node: ts.Node) {
+  const jsDocs = (node as ts.HasJSDoc).jsDoc ?? []
+  const text = jsDocs
+    .map((doc) => (doc.comment ? String(doc.comment) : ''))
+    .filter(Boolean)
+    .join('\n')
+  const tags = ts.getJSDocTags(node).map((doc) => {
+    if (ts.isJSDocParameterTag(doc)) {
+      const name = doc.name?.getText() ?? ''
+      const comment = doc.comment ? String(doc.comment) : ''
+      return `param${name ? ` ${name}` : ''}${comment ? `: ${comment}` : ''}`
+    }
+    if (ts.isJSDocReturnTag(doc)) {
+      const comment = doc.comment ? String(doc.comment) : ''
+      return `returns${comment ? `: ${comment}` : ''}`
+    }
+    const comment = doc.comment ? String(doc.comment) : ''
+    return `${doc.tagName.text}${comment ? `: ${comment}` : ''}`
+  })
+  return { text, tags }
+}
+
 function isExportedNode(node: ts.Node) {
   const modifiers = ts.getModifiers(node) ?? []
   return modifiers.some((mod) => mod.kind === ts.SyntaxKind.ExportKeyword)
@@ -835,6 +857,7 @@ ipcMain.handle(
     const isGenerator = isGeneratorNode(best.parent)
     const nodeText = best.parent.getText(sourceFile)
     const snippet = nodeText.length > 180 ? `${nodeText.slice(0, 180)}…` : nodeText
+    const jsdoc = getJsDoc(best.parent)
 
     const lineNumber = bestLine + 1
     const offset = character + 1
@@ -884,10 +907,14 @@ ipcMain.handle(
         isGenerator,
         snippet,
         tsDisplay: quick?.displayString ?? '',
-        tsDocs: quick?.documentation?.map((doc) => doc.text).join('\n') ?? '',
+        tsDocs:
+          quick?.documentation?.map((doc) => doc.text).join('\n') ??
+          jsdoc.text ??
+          '',
         tsTags:
-          quick?.tags?.map((tag) => `${tag.name}${tag.text ? `: ${tag.text}` : ''}`) ??
-          [],
+          quick?.tags?.length
+            ? quick.tags.map((tag) => `${tag.name}${tag.text ? `: ${tag.text}` : ''}`)
+            : jsdoc.tags ?? [],
         tsDefinition: defs[0] ?? null,
         tsTypeDefinition: typeDefs[0] ?? null,
         tsReferences: refs.length,

@@ -40,6 +40,7 @@ This project is built with:
 * Binary files are detected and skipped in the viewer  
 * Inspector: structural analysis for multiple languages (JS/TS, Python, Go, Rust, Java, C/C++, C#, PHP, Ruby, JSON, YAML)  
 * Inspector detail tabs: click any symbol to open a dedicated detail view (multiple detail tabs supported)  
+* Inspector detail view: collapsible sections (overview, usage, diagnostics, definitions) with occurrence navigation  
 * TypeScript/JavaScript detail: uses local `tsserver` (from the `typescript` package) for richer symbol info when available  
 * Python detail: uses local `pyright` (LSP) for hover/definitions/references/signatures when available  
 * Markdown/YAML overview (text-based fallback without WASM)  

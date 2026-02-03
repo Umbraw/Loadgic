@@ -9,6 +9,9 @@ type Props = {
   fileContent: FileContent | null
   onRevealSymbol?: (symbol: string) => void
   onDetailFocus?: (symbol: string, occurrenceIndex?: number) => void
+  occurrenceIndex?: number | null
+  occurrenceTotal?: number
+  onStepOccurrence?: (direction: 'next' | 'prev') => void
   externalDetail?: {
     value: string
     line?: number
@@ -140,8 +143,78 @@ export default function InspectorPanel({
   fileContent,
   onRevealSymbol,
   onDetailFocus,
+  occurrenceIndex,
+  occurrenceTotal,
+  onStepOccurrence,
   externalDetail,
 }: Props) {
+  const formatPathShort = (value: string | undefined) => {
+    if (!value) return '—'
+    const clean = value.startsWith('file://')
+      ? value.replace('file://', '')
+      : value
+    const parts = clean.split('/')
+    return parts[parts.length - 1] || clean
+  }
+
+  const buildTagList = (tags?: string[]) => {
+    if (!tags || tags.length === 0) return []
+    return tags.map((tag) => {
+      const [name, ...rest] = tag.split(':')
+      return {
+        name: name?.trim() || tag,
+        text: rest.join(':').trim(),
+      }
+    })
+  }
+
+  const buildParamTable = (tags?: string[]) => {
+    if (!tags || tags.length === 0) return []
+    return tags
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.startsWith('param'))
+      .map((tag) => {
+        const rest = tag.replace(/^param\s*/, '')
+        const [name, ...descParts] = rest.split(':')
+        return {
+          name: name?.trim() || '—',
+          description: descParts.join(':').trim(),
+        }
+      })
+  }
+
+  const buildReturnTag = (tags?: string[]) => {
+    if (!tags || tags.length === 0) return ''
+    const ret = tags.find((tag) => tag.trim().startsWith('returns'))
+    if (!ret) return ''
+    return ret.replace(/^returns\s*:?\s*/, '').trim()
+  }
+
+  const extractSignature = (detail: TsDetail) => {
+    if (detail.tsSignature) return detail.tsSignature
+    if (detail.tsDisplay) return detail.tsDisplay
+    if (detail.snippet) {
+      const firstLine = detail.snippet.split('\n')[0]
+      const braceIndex = firstLine.indexOf('{')
+      return braceIndex > 0 ? firstLine.slice(0, braceIndex).trim() : firstLine.trim()
+    }
+    return ''
+  }
+
+  const renderDetailCard = (
+    id: string,
+    label: string,
+    content: React.ReactNode,
+    defaultOpen = true
+  ) => (
+    <details className="inspector-detail-card" open={defaultOpen} key={id}>
+      <summary className="inspector-detail-card-header">
+        <span className="inspector-detail-label">{label}</span>
+        <span className="inspector-detail-caret" aria-hidden="true" />
+      </summary>
+      <div className="inspector-detail-body">{content}</div>
+    </details>
+  )
   const mapSymbolKind = (kind: number) => {
     switch (kind) {
       case 1:
@@ -568,8 +641,9 @@ export default function InspectorPanel({
           <span className="inspector-detail-title">Detail</span>
           <span className="inspector-detail-chip">{detailItem}</span>
         </div>
-        <div className="inspector-detail-card">
-          <div className="inspector-detail-label">Overview</div>
+        {renderDetailCard(
+          'detail-overview',
+          'Overview',
           <div className="inspector-detail-grid">
             <div>
               <div className="inspector-detail-key">Symbol</div>
@@ -580,131 +654,215 @@ export default function InspectorPanel({
               <div className="inspector-detail-value">{extension}</div>
             </div>
           </div>
-        </div>
+        )}
         {/\.(ts|tsx|js|jsx)$/.test(lowerExt) &&
           (tsDetailLoading ? (
             <div className="inspector-detail-hint">
               Loading TypeScript details…
             </div>
           ) : tsDetail ? (
-            <div className="inspector-detail-card">
-              <div className="inspector-detail-label">TypeScript detail</div>
-              <div className="inspector-detail-grid">
-              <div>
-                <div className="inspector-detail-key">Context</div>
-                <div className="inspector-detail-value">{tsDetail.context}</div>
-              </div>
-              <div>
-                <div className="inspector-detail-key">Kind</div>
-                <div className="inspector-detail-value">{tsDetail.kind}</div>
-              </div>
-              <div>
-                <div className="inspector-detail-key">Location</div>
-                <div className="inspector-detail-value">
-                  Line {tsDetail.line}, Col {tsDetail.column}
-                </div>
-              </div>
-              <div>
-                <div className="inspector-detail-key">Occurrences</div>
-                <div className="inspector-detail-value">
-                  {tsDetail.tsOccurrences ??
-                    tsDetail.tsReferences ??
-                    tsDetail.occurrences}
-                </div>
-              </div>
-              <div>
-                <div className="inspector-detail-key">Container</div>
-                <div className="inspector-detail-value">
-                  {tsDetail.container ?? '—'}
-                </div>
-              </div>
-              <div>
-                <div className="inspector-detail-key">Modifiers</div>
-                <div className="inspector-detail-value">
-                  {tsDetail.modifiers.length
-                    ? tsDetail.modifiers.join(', ')
-                    : '—'}
-                </div>
-              </div>
-              <div>
-                <div className="inspector-detail-key">Exported</div>
-                <div className="inspector-detail-value">
-                  {tsDetail.isExported ? 'Yes' : 'No'}
-                </div>
-              </div>
-              <div>
-                <div className="inspector-detail-key">Default export</div>
-                <div className="inspector-detail-value">
-                  {tsDetail.isDefaultExport ? 'Yes' : 'No'}
-                </div>
-              </div>
-              <div>
-                <div className="inspector-detail-key">Async</div>
-                <div className="inspector-detail-value">
-                  {tsDetail.isAsync ? 'Yes' : 'No'}
-                </div>
-              </div>
-              <div>
-                <div className="inspector-detail-key">Generator</div>
-                <div className="inspector-detail-value">
-                  {tsDetail.isGenerator ? 'Yes' : 'No'}
-                </div>
-              </div>
-            </div>
-            <div className="inspector-detail-code">
-              <div className="inspector-detail-key">Declaration snippet</div>
-              <div className="inspector-detail-snippet">
-                {tsDetail.tsDisplay || tsDetail.snippet || 'No preview available.'}
-              </div>
-            </div>
-            {tsDetail.tsDocs ? (
-              <div className="inspector-detail-code">
-                <div className="inspector-detail-key">Documentation</div>
-                <div className="inspector-detail-snippet">{tsDetail.tsDocs}</div>
-              </div>
-            ) : null}
-            {tsDetail.tsDefinition ? (
-              <div className="inspector-detail-code">
-                <div className="inspector-detail-key">Definition</div>
-                <div className="inspector-detail-snippet">
-                  {tsDetail.tsDefinition.file}:{tsDetail.tsDefinition.start.line}:
-                  {tsDetail.tsDefinition.start.offset}
-                </div>
-              </div>
-            ) : null}
-            {tsDetail.tsTypeDefinition ? (
-              <div className="inspector-detail-code">
-                <div className="inspector-detail-key">Type definition</div>
-                <div className="inspector-detail-snippet">
-                  {tsDetail.tsTypeDefinition.file}:
-                  {tsDetail.tsTypeDefinition.start.line}:
-                  {tsDetail.tsTypeDefinition.start.offset}
-                </div>
-              </div>
-            ) : null}
-            {tsDetail.tsSignature ? (
-              <div className="inspector-detail-code">
-                <div className="inspector-detail-key">Signature</div>
-                <div className="inspector-detail-snippet">
-                  {tsDetail.tsSignature}
-                </div>
-                {typeof tsDetail.tsSignatureActiveParam === 'number' ? (
-                  <div className="inspector-detail-hint">
-                    Active parameter: {tsDetail.tsSignatureActiveParam + 1}
+            <>
+              {renderDetailCard(
+                'ts-symbol-overview',
+                'Symbol overview',
+                <div className="inspector-detail-grid">
+                  <div>
+                    <div className="inspector-detail-key">Kind</div>
+                    <div className="inspector-detail-value">{tsDetail.kind}</div>
                   </div>
-                ) : null}
-              </div>
-            ) : null}
-            {typeof tsDetail.tsDiagnostics === 'number' ? (
-              <div className="inspector-detail-code">
-                <div className="inspector-detail-key">Diagnostics</div>
-                <div className="inspector-detail-snippet">
-                  {tsDetail.tsDiagnostics} issue
-                  {tsDetail.tsDiagnostics === 1 ? '' : 's'}
+                  <div>
+                    <div className="inspector-detail-key">Context</div>
+                    <div className="inspector-detail-value">{tsDetail.context}</div>
+                  </div>
+                  <div>
+                    <div className="inspector-detail-key">Location</div>
+                    <div className="inspector-detail-value">
+                      Line {tsDetail.line}, Col {tsDetail.column}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="inspector-detail-key">Container</div>
+                    <div className="inspector-detail-value">
+                      {tsDetail.container ?? '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="inspector-detail-key">Modifiers</div>
+                    <div className="inspector-detail-value">
+                      {tsDetail.modifiers.length
+                        ? tsDetail.modifiers.join(', ')
+                        : '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="inspector-detail-key">Flags</div>
+                    <div className="inspector-detail-value">
+                      {[
+                        tsDetail.isExported ? 'exported' : null,
+                        tsDetail.isDefaultExport ? 'default' : null,
+                        tsDetail.isAsync ? 'async' : null,
+                        tsDetail.isGenerator ? 'generator' : null,
+                      ]
+                        .filter(Boolean)
+                        .join(', ') || '—'}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ) : null}
-          </div>
+              )}
+              {extractSignature(tsDetail)
+                ? renderDetailCard(
+                    'ts-signature',
+                    'Signature',
+                    <>
+                      <div className="inspector-detail-snippet">
+                        {extractSignature(tsDetail)}
+                      </div>
+                      <div className="inspector-detail-actions">
+                        <button
+                          className="inspector-detail-action"
+                          type="button"
+                          onClick={() =>
+                            navigator.clipboard?.writeText(
+                              extractSignature(tsDetail)
+                            )
+                          }
+                        >
+                          Copy signature
+                        </button>
+                      </div>
+                      {typeof tsDetail.tsSignatureActiveParam === 'number' ? (
+                        <div className="inspector-detail-hint">
+                          Active parameter: {tsDetail.tsSignatureActiveParam + 1}
+                        </div>
+                      ) : null}
+                    </>
+                  )
+                : null}
+              {renderDetailCard(
+                'ts-docs',
+                'Documentation',
+                (() => {
+                  const params = buildParamTable(tsDetail.tsTags)
+                  const returns = buildReturnTag(tsDetail.tsTags)
+                  return (
+                    <>
+                      <div className="inspector-detail-snippet">
+                        {tsDetail.tsDocs || 'No documentation available.'}
+                      </div>
+                      {params.length ? (
+                        <div className="inspector-detail-table">
+                          <div className="inspector-detail-table-head">
+                            <span>Param</span>
+                            <span>Description</span>
+                          </div>
+                          {params.map((param) => (
+                            <div
+                              key={`${param.name}-${param.description}`}
+                              className="inspector-detail-table-row"
+                            >
+                              <span>{param.name}</span>
+                              <span>{param.description || '—'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {returns ? (
+                        <div className="inspector-detail-hint">
+                          Returns: {returns}
+                        </div>
+                      ) : null}
+                    </>
+                  )
+                })()
+              )}
+              {renderDetailCard(
+                'ts-usage',
+                'Usage',
+                <>
+                  <div className="inspector-detail-grid">
+                  <div>
+                    <div className="inspector-detail-key">Occurrences</div>
+                    <div className="inspector-detail-value">
+                      {(tsDetail.tsOccurrences && tsDetail.tsOccurrences > 0
+                        ? tsDetail.tsOccurrences
+                        : tsDetail.tsReferences && tsDetail.tsReferences > 0
+                        ? tsDetail.tsReferences
+                        : tsDetail.occurrences) ?? 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="inspector-detail-key">Focus</div>
+                    <div className="inspector-detail-value">
+                      {typeof occurrenceIndex === 'number' &&
+                      typeof occurrenceTotal === 'number' &&
+                      occurrenceTotal > 0
+                        ? `${occurrenceIndex + 1} / ${occurrenceTotal}`
+                        : '—'}
+                    </div>
+                  </div>
+                  </div>
+                  <div className="inspector-detail-actions">
+                    <button
+                      className="inspector-detail-action"
+                      type="button"
+                      onClick={() => onStepOccurrence?.('prev')}
+                      disabled={!onStepOccurrence}
+                    >
+                      Prev occurrence
+                    </button>
+                    <button
+                      className="inspector-detail-action"
+                      type="button"
+                      onClick={() => onStepOccurrence?.('next')}
+                      disabled={!onStepOccurrence}
+                    >
+                      Next occurrence
+                    </button>
+                  </div>
+                </>
+              )}
+              {tsDetail.tsDefinition
+                ? renderDetailCard(
+                    'ts-definition',
+                    'Definition',
+                    <div className="inspector-detail-snippet">
+                      {formatPathShort(tsDetail.tsDefinition.file)}:
+                      {tsDetail.tsDefinition.start.line}:
+                      {tsDetail.tsDefinition.start.offset}
+                    </div>
+                  )
+                : null}
+              {tsDetail.tsTypeDefinition
+                ? renderDetailCard(
+                    'ts-type-definition',
+                    'Type definition',
+                    <div className="inspector-detail-snippet">
+                      {formatPathShort(tsDetail.tsTypeDefinition.file)}:
+                      {tsDetail.tsTypeDefinition.start.line}:
+                      {tsDetail.tsTypeDefinition.start.offset}
+                    </div>
+                  )
+                : null}
+              {tsDetail.snippet
+                ? renderDetailCard(
+                    'ts-declaration',
+                    'Declaration',
+                    <div className="inspector-detail-snippet">
+                      {tsDetail.snippet}
+                    </div>
+                  )
+                : null}
+              {typeof tsDetail.tsDiagnostics === 'number'
+                ? renderDetailCard(
+                    'ts-diagnostics',
+                    'Diagnostics',
+                    <div className="inspector-detail-snippet">
+                      {tsDetail.tsDiagnostics} issue
+                      {tsDetail.tsDiagnostics === 1 ? '' : 's'}
+                    </div>
+                  )
+                : null}
+            </>
           ) : (
             <div className="inspector-detail-hint">
               TypeScript details unavailable for this symbol.
@@ -714,9 +872,11 @@ export default function InspectorPanel({
           pyDetailLoading ? (
             <div className="inspector-detail-hint">Loading Python details…</div>
           ) : pyDetail ? (
-            <div className="inspector-detail-card">
-              <div className="inspector-detail-label">Python detail</div>
-              <div className="inspector-detail-grid">
+            <>
+              {renderDetailCard(
+                'py-detail',
+                'Python detail',
+                <div className="inspector-detail-grid">
                 <div>
                   <div className="inspector-detail-key">Hover</div>
                   <div className="inspector-detail-value">
@@ -757,109 +917,119 @@ export default function InspectorPanel({
                   </div>
                 </div>
               </div>
-              {pyDetail.symbolCounts &&
-              Object.keys(pyDetail.symbolCounts).length ? (
-                <div className="inspector-detail-code">
-                  <div className="inspector-detail-key">Symbol breakdown</div>
-                  {(() => {
-                    const entries = Object.entries(pyDetail.symbolCounts).map(
-                      ([kind, count]) => ({
-                        kind: Number(kind),
-                        label: mapSymbolKind(Number(kind)),
-                        count,
-                      })
-                    )
-                    const total = entries.reduce((sum, item) => sum + item.count, 0)
-                    const top = [...entries].sort((a, b) => b.count - a.count).slice(0, 4)
-                    const summary = top
-                      .map((item) => `${item.count} ${item.label.toLowerCase()}`)
-                      .join(', ')
-                    const grouped: Record<string, number> = {
-                      'Classes/Types': 0,
-                      Functions: 0,
-                      Variables: 0,
-                    }
-                    entries.forEach((item) => {
-                      if ([5, 10, 11, 23, 26].includes(item.kind)) {
-                        grouped['Classes/Types'] += item.count
-                      } else if ([6, 9, 12].includes(item.kind)) {
-                        grouped.Functions += item.count
-                      } else if ([7, 8, 13, 14].includes(item.kind)) {
-                        grouped.Variables += item.count
+            )}
+            {pyDetail.symbolCounts &&
+            Object.keys(pyDetail.symbolCounts).length
+              ? renderDetailCard(
+                  'py-breakdown',
+                  'Symbol breakdown',
+                  <div className="inspector-detail-code">
+                    {(() => {
+                      const entries = Object.entries(pyDetail.symbolCounts).map(
+                        ([kind, count]) => ({
+                          kind: Number(kind),
+                          label: mapSymbolKind(Number(kind)),
+                          count,
+                        })
+                      )
+                      const total = entries.reduce(
+                        (sum, item) => sum + item.count,
+                        0
+                      )
+                      const top = [...entries]
+                        .sort((a, b) => b.count - a.count)
+                        .slice(0, 4)
+                      const summary = top
+                        .map((item) => `${item.count} ${item.label.toLowerCase()}`)
+                        .join(', ')
+                      const grouped: Record<string, number> = {
+                        'Classes/Types': 0,
+                        Functions: 0,
+                        Variables: 0,
                       }
-                    })
-                    return (
-                      <>
-                        <div className="inspector-detail-hint">
-                          {total} symbols detected — top: {summary || '—'}
-                        </div>
-                        <div className="inspector-detail-snippet">
-                          {Object.entries(grouped)
-                            .filter(([, count]) => count > 0)
-                            .map(([label, count]) => `${label}: ${count}`)
-                            .join(' • ') || '—'}
-                        </div>
-                      </>
-                    )
-                  })()}
-                  <div className="inspector-detail-snippet">
-                    {Object.entries(pyDetail.symbolCounts)
-                      .map(([kind, count]) => ({
-                        label: mapSymbolKind(Number(kind)),
-                        count,
-                      }))
-                      .sort((a, b) => b.count - a.count)
-                      .map(({ label, count }) => `${label}: ${count}`)
-                      .join(' • ')}
-                  </div>
-                </div>
-              ) : null}
-              {pyDetail.signature ? (
-                <div className="inspector-detail-code">
-                  <div className="inspector-detail-key">Signature</div>
-                  <div className="inspector-detail-snippet">
-                    {pyDetail.signature}
-                  </div>
-                  {typeof pyDetail.signatureActiveParam === 'number' ? (
-                    <div className="inspector-detail-hint">
-                      Active parameter: {pyDetail.signatureActiveParam + 1}
+                      entries.forEach((item) => {
+                        if ([5, 10, 11, 23, 26].includes(item.kind)) {
+                          grouped['Classes/Types'] += item.count
+                        } else if ([6, 9, 12].includes(item.kind)) {
+                          grouped.Functions += item.count
+                        } else if ([7, 8, 13, 14].includes(item.kind)) {
+                          grouped.Variables += item.count
+                        }
+                      })
+                      return (
+                        <>
+                          <div className="inspector-detail-hint">
+                            {total} symbols detected — top: {summary || '—'}
+                          </div>
+                          <div className="inspector-detail-snippet">
+                            {Object.entries(grouped)
+                              .filter(([, count]) => count > 0)
+                              .map(([label, count]) => `${label}: ${count}`)
+                              .join(' • ') || '—'}
+                          </div>
+                        </>
+                      )
+                    })()}
+                    <div className="inspector-detail-snippet">
+                      {Object.entries(pyDetail.symbolCounts)
+                        .map(([kind, count]) => ({
+                          label: mapSymbolKind(Number(kind)),
+                          count,
+                        }))
+                        .sort((a, b) => b.count - a.count)
+                        .map(({ label, count }) => `${label}: ${count}`)
+                        .join(' • ')}
                     </div>
-                  ) : null}
-                </div>
-              ) : null}
-              {pyDetail.definitions?.length ? (
-                <div className="inspector-detail-code">
-                  <div className="inspector-detail-key">Definition</div>
-                  {(() => {
+                  </div>
+                )
+              : null}
+            {pyDetail.signature
+              ? renderDetailCard(
+                  'py-signature',
+                  'Signature',
+                  <>
+                    <div className="inspector-detail-snippet">
+                      {pyDetail.signature}
+                    </div>
+                    {typeof pyDetail.signatureActiveParam === 'number' ? (
+                      <div className="inspector-detail-hint">
+                        Active parameter: {pyDetail.signatureActiveParam + 1}
+                      </div>
+                    ) : null}
+                  </>
+                )
+              : null}
+            {pyDetail.definitions?.length
+              ? renderDetailCard(
+                  'py-definition',
+                  'Definition',
+                  (() => {
                     const def = pyDetail.definitions[0]
                     const loc = formatLspLocation(
                       def.uri,
                       def.range.start.line,
                       def.range.start.character
                     )
-                    return (
-                      <div className="inspector-detail-snippet">{loc.title}</div>
-                    )
-                  })()}
-                </div>
-              ) : null}
-              {pyDetail.typeDefinitions?.length ? (
-                <div className="inspector-detail-code">
-                  <div className="inspector-detail-key">Type definition</div>
-                  {(() => {
+                    return <div className="inspector-detail-snippet">{loc.title}</div>
+                  })()
+                )
+              : null}
+            {pyDetail.typeDefinitions?.length
+              ? renderDetailCard(
+                  'py-type-definition',
+                  'Type definition',
+                  (() => {
                     const def = pyDetail.typeDefinitions[0]
                     const loc = formatLspLocation(
                       def.uri,
                       def.range.start.line,
                       def.range.start.character
                     )
-                    return (
-                      <div className="inspector-detail-snippet">{loc.title}</div>
-                    )
-                  })()}
-                </div>
-              ) : null}
-            </div>
+                    return <div className="inspector-detail-snippet">{loc.title}</div>
+                  })()
+                )
+              : null}
+            </>
           ) : (
             <div className="inspector-detail-hint">
               Python details unavailable for this symbol.
