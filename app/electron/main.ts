@@ -5,6 +5,7 @@ import { readFile, readdir } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import { createRequire } from 'node:module'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import type * as tsType from 'typescript'
 import type { ProjectNode } from '@/types/project'
 import type { FileContent } from '@/types/file'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -437,7 +438,7 @@ function getScriptKind(ext: string) {
   }
 }
 
-function classifyIdentifier(node: ts.Identifier) {
+function classifyIdentifier(node: tsType.Identifier) {
   const parent = node.parent
   if (ts.isImportSpecifier(parent) || ts.isImportClause(parent)) return 'import'
   if (ts.isExportSpecifier(parent)) return 'export'
@@ -456,16 +457,17 @@ function classifyIdentifier(node: ts.Identifier) {
   return 'identifier'
 }
 
-function getModifierNames(node: ts.Node) {
+function getModifierNames(node: tsType.Node) {
+  if (!ts.canHaveModifiers(node)) return []
   const modifiers = ts.getModifiers(node)
   if (!modifiers || modifiers.length === 0) return []
   return modifiers.map((modifier) => ts.SyntaxKind[modifier.kind])
 }
 
-function getJsDoc(node: ts.Node) {
-  const jsDocs = (node as ts.HasJSDoc).jsDoc ?? []
-  const text = jsDocs
-    .map((doc) => (doc.comment ? String(doc.comment) : ''))
+function getJsDoc(node: tsType.Node) {
+  const text = ts
+    .getJSDocCommentsAndTags(node)
+    .flatMap((doc) => (ts.isJSDoc(doc) && doc.comment ? [String(doc.comment)] : []))
     .filter(Boolean)
     .join('\n')
   const tags = ts.getJSDocTags(node).map((doc) => {
@@ -484,30 +486,33 @@ function getJsDoc(node: ts.Node) {
   return { text, tags }
 }
 
-function isExportedNode(node: ts.Node) {
-  const modifiers = ts.getModifiers(node) ?? []
+function isExportedNode(node: tsType.Node) {
+  const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) ?? [] : []
   return modifiers.some((mod) => mod.kind === ts.SyntaxKind.ExportKeyword)
 }
 
-function isDefaultExportNode(node: ts.Node) {
-  const modifiers = ts.getModifiers(node) ?? []
+function isDefaultExportNode(node: tsType.Node) {
+  const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) ?? [] : []
   return modifiers.some((mod) => mod.kind === ts.SyntaxKind.DefaultKeyword)
 }
 
-function isAsyncNode(node: ts.Node) {
-  const modifiers = ts.getModifiers(node) ?? []
+function isAsyncNode(node: tsType.Node) {
+  const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) ?? [] : []
   return modifiers.some((mod) => mod.kind === ts.SyntaxKind.AsyncKeyword)
 }
 
-function isGeneratorNode(node: ts.Node) {
-  return (
-    (ts.isFunctionLike(node) && !!node.asteriskToken) ||
-    (ts.isMethodDeclaration(node) && !!node.asteriskToken)
-  )
+function isGeneratorNode(node: tsType.Node) {
+  if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) {
+    return !!node.asteriskToken
+  }
+  if (ts.isMethodDeclaration(node)) {
+    return !!node.asteriskToken
+  }
+  return false
 }
 
-function getContainerName(node: ts.Node) {
-  let current: ts.Node | undefined = node.parent
+function getContainerName(node: tsType.Node) {
+  let current: tsType.Node | undefined = node.parent
   while (current) {
     if (
       (ts.isClassDeclaration(current) ||
@@ -525,18 +530,18 @@ function getContainerName(node: ts.Node) {
   return null
 }
 
-function getBestIdentifierMatch(sourceFile: ts.SourceFile, symbol: string) {
-  const matches: ts.Identifier[] = []
-  const visit = (node: ts.Node) => {
+function getBestIdentifierMatch(sourceFile: tsType.SourceFile, symbol: string) {
+  const matches: tsType.Identifier[] = []
+  const visit = (node: tsType.Node) => {
     if (ts.isIdentifier(node) && node.text === symbol) {
       matches.push(node)
     }
     ts.forEachChild(node, visit)
   }
   visit(sourceFile)
-  if (!matches.length) return { matches, best: null as ts.Identifier | null }
+  if (!matches.length) return { matches, best: null as tsType.Identifier | null }
 
-  const rank = (node: ts.Identifier) => {
+  const rank = (node: tsType.Identifier) => {
     const kind = classifyIdentifier(node)
     switch (kind) {
       case 'import':
@@ -815,7 +820,7 @@ ipcMain.handle(
       getScriptKind(ext)
     )
     const { matches, best: fallbackBest } = getBestIdentifierMatch(sourceFile, symbol)
-    let best: ts.Identifier | null = null
+    let best: tsType.Identifier | null = null
     if (
       typeof line === 'number' &&
       typeof column === 'number' &&
@@ -823,13 +828,22 @@ ipcMain.handle(
       column > 0
     ) {
       const pos = sourceFile.getPositionOfLineAndCharacter(line - 1, column - 1)
-      const token = ts.getTokenAtPosition(sourceFile, pos)
-      if (ts.isIdentifier(token)) {
-        best = token
-      } else if (ts.isPropertyAccessExpression(token)) {
-        best = token.name
-      } else if (ts.isQualifiedName(token)) {
-        best = token.right
+      const tokenAt = (
+        ts as unknown as {
+          getTokenAtPosition?: (sf: tsType.SourceFile, p: number) => tsType.Node
+        }
+      ).getTokenAtPosition
+      const token = tokenAt ? tokenAt(sourceFile, pos) : null
+      if (token) {
+        if (ts.isIdentifier(token)) {
+          best = token
+        } else if (ts.isPropertyAccessExpression(token)) {
+          if (ts.isIdentifier(token.name)) {
+            best = token.name
+          }
+        } else if (ts.isQualifiedName(token)) {
+          best = token.right
+        }
       }
     }
     if (!best) {
@@ -973,8 +987,11 @@ ipcMain.handle(
 
     try {
       const content = await readFile(resolvedFile, 'utf-8')
-      let position = { line, column }
-      if (!position.line || !position.column) {
+      let position: { line: number; column: number } | null = null
+      if (typeof line === 'number' && typeof column === 'number') {
+        position = { line, column }
+      }
+      if (!position) {
         const fallback = findFirstOccurrencePosition(content, symbol)
         if (!fallback) return null
         position = fallback
