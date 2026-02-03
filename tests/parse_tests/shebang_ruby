@@ -1,0 +1,20 @@
+#!/usr/bin/env ruby
+# Shebang-based Ruby demo (no extension).
+
+class Counter
+  def initialize
+    @value = 0
+  end
+
+  def inc
+    @value += 1
+  end
+
+  def value
+    @value
+  end
+end
+
+def add(a, b)
+  a + b
+end

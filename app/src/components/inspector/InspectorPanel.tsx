@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FileContent } from '../../types/file'
 import type { Outline } from '../../analyzers/types'
+import {
+  getLanguageDefinition,
+  getLanguageForFileWithContent,
+  type LanguageId,
+} from '../../analyzers/languages'
 import { useTheme } from '../../theme/ThemeProvider'
 
 // Props for InspectorPanel component
 type Props = {
   filePath: string | null
   fileContent: FileContent | null
+  forcedLanguageId?: LanguageId | null
   onRevealSymbol?: (symbol: string) => void
   onDetailFocus?: (symbol: string, occurrenceIndex?: number) => void
   occurrenceIndex?: number | null
@@ -141,6 +147,7 @@ function Section({
 export default function InspectorPanel({
   filePath,
   fileContent,
+  forcedLanguageId,
   onRevealSymbol,
   onDetailFocus,
   occurrenceIndex,
@@ -300,6 +307,20 @@ export default function InspectorPanel({
     }
   }
   const { analysisSettings } = useTheme()
+  const languageId =
+    forcedLanguageId ??
+    (filePath && fileContent?.kind === 'text'
+      ? getLanguageForFileWithContent(filePath, fileContent.content)
+      : null)
+  const languageLabel = languageId
+    ? getLanguageDefinition(languageId)?.label ?? languageId.toUpperCase()
+    : null
+  const isTsLike =
+    languageId === 'javascript' ||
+    languageId === 'jsx' ||
+    languageId === 'typescript' ||
+    languageId === 'tsx'
+  const isPython = languageId === 'python'
   const workerRef = useRef<Worker | null>(null)
   const requestIdRef = useRef(0)
   const [outline, setOutline] = useState<Outline | null>(null)
@@ -373,8 +394,9 @@ export default function InspectorPanel({
       content: fileContent.content,
       settings: analysisSettings,
       baseUrl: window.location.origin,
+      overrideLanguageId: forcedLanguageId ?? null,
     })
-  }, [filePath, fileContent, analysisSettings])
+  }, [filePath, fileContent, analysisSettings, forcedLanguageId])
 
   useEffect(() => {
     const activeDetail = tabs.find((tab) => tab.id === activeTab)
@@ -384,8 +406,7 @@ export default function InspectorPanel({
       setTsDetailLoading(false)
       return
     }
-    const lower = filePath.toLowerCase()
-    if (!/\.(ts|tsx|js|jsx)$/.test(lower)) {
+    if (!isTsLike) {
       setTsDetail(null)
       setTsDetailLoading(false)
       return
@@ -426,7 +447,7 @@ export default function InspectorPanel({
         if (timedOut || tsDetailReqRef.current !== reqId) return
         setTsDetailLoading(false)
       })
-  }, [filePath, activeTab, tabs])
+  }, [filePath, activeTab, tabs, isTsLike])
 
   useEffect(() => {
     const activeDetail = tabs.find((tab) => tab.id === activeTab)
@@ -436,8 +457,7 @@ export default function InspectorPanel({
       setPyDetailLoading(false)
       return
     }
-    const lower = filePath.toLowerCase()
-    if (!/\.py$/.test(lower)) {
+    if (!isPython) {
       setPyDetail(null)
       setPyDetailLoading(false)
       return
@@ -478,7 +498,7 @@ export default function InspectorPanel({
         if (timedOut || pyDetailReqRef.current !== reqId) return
         setPyDetailLoading(false)
       })
-  }, [filePath, activeTab, tabs])
+  }, [filePath, activeTab, tabs, isPython])
 
   useEffect(() => {
     if (!filePath) return
@@ -631,9 +651,7 @@ export default function InspectorPanel({
         </div>
       )
     }
-    const extension =
-      filePath?.split('.').pop()?.toUpperCase() ?? 'Unknown'
-    const lowerExt = filePath?.toLowerCase() ?? ''
+    const extension = languageLabel ?? 'Unknown'
     return (
       <div className="inspector-body inspector-scroll">
         {tabsBar}
@@ -655,7 +673,7 @@ export default function InspectorPanel({
             </div>
           </div>
         )}
-        {/\.(ts|tsx|js|jsx)$/.test(lowerExt) &&
+        {isTsLike &&
           (tsDetailLoading ? (
             <div className="inspector-detail-hint">
               Loading TypeScript details…
@@ -868,7 +886,7 @@ export default function InspectorPanel({
               TypeScript details unavailable for this symbol.
             </div>
           ))}
-        {/\.py$/.test(lowerExt) ? (
+        {isPython ? (
           pyDetailLoading ? (
             <div className="inspector-detail-hint">Loading Python details…</div>
           ) : pyDetail ? (

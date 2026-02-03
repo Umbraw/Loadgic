@@ -2,7 +2,7 @@ import type { Outline } from './types'
 import { analyzeWithTreeSitter } from './treeSitterAnalyzer'
 import {
   CORE_LANGUAGE_IDS,
-  getLanguageForFile,
+  getLanguageForFileWithContent,
   type LanguageId,
 } from './languages'
 import { analyzeMarkdownText, analyzeYamlText } from './plainTextAnalyzers'
@@ -20,9 +20,11 @@ export const DEFAULT_ANALYSIS_SETTINGS: AnalysisSettings = {
 export async function analyzeFileContent(
   filePath: string,
   content: string,
-  settings: AnalysisSettings = DEFAULT_ANALYSIS_SETTINGS
+  settings: AnalysisSettings = DEFAULT_ANALYSIS_SETTINGS,
+  forcedLanguageId?: LanguageId | null
 ): Promise<Outline | null> {
-  const languageId = getLanguageForFile(filePath)
+  const languageId =
+    forcedLanguageId ?? getLanguageForFileWithContent(filePath, content)
   if (!languageId || !settings.enabledLanguages.includes(languageId)) {
     return null
   }

@@ -38,6 +38,7 @@ This project is built with:
 * Project folder import and tree explorer  
 * File viewer with syntax highlighting (CodeMirror)  
 * Binary files are detected and skipped in the viewer  
+* Manual analyzer override (per-file) for unknown/no-extension files  
 * Inspector: structural analysis for multiple languages (JS/TS, Python, Go, Rust, Java, C/C++, C#, PHP, Ruby, JSON, YAML)  
 * Inspector detail tabs: click any symbol to open a dedicated detail view (multiple detail tabs supported)  
 * Inspector detail view: collapsible sections (overview, usage, diagnostics, definitions) with occurrence navigation  

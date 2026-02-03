@@ -25,11 +25,18 @@ import {
 } from '@codemirror/state'
 import { Decoration, EditorView, ViewPlugin } from '@codemirror/view'
 import { useTheme } from '../../theme/ThemeProvider'
+import {
+  detectLanguageFromShebang,
+  LANGUAGE_DEFINITIONS,
+  type LanguageId,
+} from '../../analyzers/languages'
 
 // Props for FileViewer component
 type Props = {
   content: string
   filePath: string
+  forcedLanguageId?: LanguageId | null
+  onLanguageOverrideChange?: (next: LanguageId | null) => void
   highlightQuery?: string | null
   occurrenceIndex?: number | null
   focusRequest?: number
@@ -103,6 +110,40 @@ function getLanguageExtension(ext: string) {
       return php()
     case 'sql':
       return sql()
+    default:
+      return []
+  }
+}
+
+function getLanguageExtensionById(languageId: string) {
+  switch (languageId) {
+    case 'javascript':
+    case 'jsx':
+    case 'typescript':
+    case 'tsx':
+      return javascript({ typescript: languageId.includes('ts') })
+    case 'python':
+      return python()
+    case 'json':
+      return json()
+    case 'yaml':
+      return yaml()
+    case 'markdown':
+      return markdown()
+    case 'java':
+      return java()
+    case 'rust':
+      return rust()
+    case 'php':
+      return php()
+    case 'sql':
+      return sql()
+    case 'xml':
+      return xml()
+    case 'html':
+      return html()
+    case 'css':
+      return css()
     default:
       return []
   }
@@ -291,6 +332,8 @@ function createInspectorExtensions(query: string, activeIndex?: number | null) {
 export default function FileViewer({
   content,
   filePath,
+  forcedLanguageId,
+  onLanguageOverrideChange,
   highlightQuery,
   occurrenceIndex,
   focusRequest,
@@ -300,9 +343,20 @@ export default function FileViewer({
   const { theme, editorTheme } = useTheme()
   const extensions = useMemo(() => {
     const ext = getExtension(filePath)
-    const lang = getLanguageExtension(ext)
+    const resolvedLanguageId =
+      forcedLanguageId ??
+      (ext.length > 0 ? null : detectLanguageFromShebang(content)) ??
+      null
+    const lang = resolvedLanguageId
+      ? getLanguageExtensionById(resolvedLanguageId)
+      : getLanguageExtension(ext)
     return Array.isArray(lang) ? [] : [lang]
-  }, [filePath])
+  }, [filePath, content, forcedLanguageId])
+
+  const languageOptions = useMemo(
+    () => LANGUAGE_DEFINITIONS,
+    []
+  )
 
   const [editorView, setEditorView] = useState<EditorView | null>(null)
 
@@ -414,21 +468,23 @@ export default function FileViewer({
   }, [editorView, onSymbolSelect])
 
   return (
-    <CodeMirror
-      value={content}
-      theme={getEditorTheme(editorTheme, theme === 'dark')}
-      extensions={[...extensions, highlightExtension]}
-      readOnly
-      editable={false}
-      basicSetup={{
-        lineNumbers: true,
-        foldGutter: false,
-        highlightActiveLine: false,
-        highlightActiveLineGutter: false,
-      }}
-      onCreateEditor={(view) => {
-        setEditorView(view)
-      }}
-    />
+    <div className="file-viewer-shell">
+      <CodeMirror
+        value={content}
+        theme={getEditorTheme(editorTheme, theme === 'dark')}
+        extensions={[...extensions, highlightExtension]}
+        readOnly
+        editable={false}
+        basicSetup={{
+          lineNumbers: true,
+          foldGutter: false,
+          highlightActiveLine: false,
+          highlightActiveLineGutter: false,
+        }}
+        onCreateEditor={(view) => {
+          setEditorView(view)
+        }}
+      />
+    </div>
   )
 }

@@ -1,0 +1,10 @@
+#!/usr/bin/env node
+// Shebang-based JS demo (no extension).
+
+export const version = '0.1.0'
+
+export function sum(a, b) {
+  return a + b
+}
+
+export const data = { ok: true }

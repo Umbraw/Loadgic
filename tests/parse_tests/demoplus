@@ -1,0 +1,45 @@
+#!/usr/bin/env ts-node
+
+/**
+ * Adds two numbers together.
+ * @param a First number.
+ * @param b Second number.
+ * @returns Sum of a and b.
+ */
+export function add(a: number, b: number) {
+  return a + b
+}
+
+/**
+ * Formats a greeting message.
+ * @param name Person name.
+ * @param loud If true, uses uppercase.
+ */
+export function greet(name: string, loud = false) {
+  const message = `Hello, ${name}`
+  return loud ? message.toUpperCase() : message
+}
+
+/**
+ * Simple utility class with JSDoc.
+ */
+export class Counter {
+  /** Current value. */
+  private value = 0
+
+  /** Increment by one and return the new value. */
+  increment() {
+    this.value += 1
+    return this.value
+  }
+
+  /** Reset back to zero. */
+  reset() {
+    this.value = 0
+  }
+}
+
+/**
+ * Example of a typed constant.
+ */
+export const version: string = '1.0.0'

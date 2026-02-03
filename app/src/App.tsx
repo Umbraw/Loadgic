@@ -9,6 +9,10 @@ import FileViewer from './components/files/FileViewer'
 import LogicView from './components/logic/LogicView'
 import type { LogicViewHandle } from './components/logic/LogicView'
 import InspectorPanel from './components/inspector/InspectorPanel'
+import {
+  LANGUAGE_DEFINITIONS,
+  type LanguageId,
+} from './analyzers/languages'
 
 const SIDEBAR_WIDTH = 54
 const MIN_PANEL_WIDTH = 220
@@ -49,6 +53,16 @@ function App() {
     nonce: number
   } | null>(null)
   const [inspectorSearch, setInspectorSearch] = useState('')
+  const [languageOverrides, setLanguageOverrides] = useState<
+    Record<string, LanguageId>
+  >(() => {
+    try {
+      const stored = window.localStorage.getItem('loadgic:languageOverrides')
+      return stored ? (JSON.parse(stored) as Record<string, LanguageId>) : {}
+    } catch {
+      return {}
+    }
+  })
   const settingsMenuRef = useRef<HTMLDivElement | null>(null)
   const suppressContextCloseRef = useRef(false)
   const logicViewRef = useRef<LogicViewHandle | null>(null)
@@ -67,6 +81,9 @@ function App() {
   )
   const fullTreeLoadedRef = useRef<string | null>(null)
   const fullTreeLoadingRef = useRef(false)
+  const selectedLanguageOverride = selectedFilePath
+    ? languageOverrides[selectedFilePath] ?? null
+    : null
 
   // Select active view
   function selectView(next: ViewMode) {
@@ -79,6 +96,22 @@ function App() {
       return next
     })
   }
+
+  const handleLanguageOverrideChange = useCallback(
+    (next: LanguageId | null) => {
+      if (!selectedFilePath) return
+      setLanguageOverrides((prev) => {
+        const updated = { ...prev }
+        if (!next) {
+          delete updated[selectedFilePath]
+        } else {
+          updated[selectedFilePath] = next
+        }
+        return updated
+      })
+    },
+    [selectedFilePath]
+  )
 
   useEffect(() => {
     panelWidthRef.current = panelWidth
@@ -101,6 +134,13 @@ function App() {
       setLogicRevealKey((prev) => prev + 1)
     }
   }, [activeView])
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      'loadgic:languageOverrides',
+      JSON.stringify(languageOverrides)
+    )
+  }, [languageOverrides])
 
   useEffect(() => {
     function handleMouseMove(event: MouseEvent) {
@@ -677,40 +717,67 @@ function App() {
             />
           ) : activeView === 'files' && selectedFilePath ? (
             <div className="file-viewer">
-              <div className="file-viewer-header">
-                {selectedFilePath ? (
-                  <>
-                    <button
-                      className="file-viewer-copy"
-                      onClick={() => copyPathToClipboard(selectedFilePath)}
-                      aria-label="Copy full path"
-                      title="Copy full path"
-                      type="button"
-                    >
-                      <span className="file-viewer-copy-icon">⧉</span>
-                      <span className="file-viewer-copy-label">Copy</span>
-                    </button>
-                    <span className="file-viewer-path">
-                      {splitPath(selectedFilePath).dir}
-                      {splitPath(selectedFilePath).dir ? '/' : ''}
-                    </span>
-                    <span className="file-viewer-name">
-                      {splitPath(selectedFilePath).name}
-                    </span>
-                  </>
-                ) : null}
-              </div>
               {selectedFileContent ? (
                 selectedFileContent.kind === 'text' ? (
-                  <FileViewer
-                    content={selectedFileContent.content}
-                    filePath={selectedFilePath}
-                    highlightQuery={highlightQuery}
-                    occurrenceIndex={highlightIndex}
-                    focusRequest={highlightRequest}
-                    onOccurrencesChange={setHighlightTotal}
-                    onSymbolSelect={handleCodeSymbolSelect}
-                  />
+                  <>
+                    <div className="file-viewer-actions">
+                      <div className="file-language-select">
+                        <span className="file-language-label">Analyzer</span>
+                        <select
+                          className="file-language-dropdown"
+                          value={selectedLanguageOverride ?? ''}
+                          onChange={(event) =>
+                            handleLanguageOverrideChange(
+                              event.target.value
+                                ? (event.target.value as LanguageId)
+                                : null
+                            )
+                          }
+                        >
+                          <option value="">Auto</option>
+                          {LANGUAGE_DEFINITIONS.map((language) => (
+                            <option key={language.id} value={language.id}>
+                              {language.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="file-viewer-header">
+                      {selectedFilePath ? (
+                        <>
+                          <button
+                            className="file-viewer-copy"
+                            onClick={() => copyPathToClipboard(selectedFilePath)}
+                            aria-label="Copy full path"
+                            title="Copy full path"
+                            type="button"
+                          >
+                            <span className="file-viewer-copy-icon">⧉</span>
+                            <span className="file-viewer-copy-label">Copy</span>
+                          </button>
+                          <span className="file-viewer-path">
+                            {splitPath(selectedFilePath).dir}
+                            {splitPath(selectedFilePath).dir ? '/' : ''}
+                          </span>
+                          <span className="file-viewer-name">
+                            {splitPath(selectedFilePath).name}
+                          </span>
+                        </>
+                      ) : null}
+                    </div>
+                    <FileViewer
+                      content={selectedFileContent.content}
+                      filePath={selectedFilePath}
+                      forcedLanguageId={selectedLanguageOverride}
+                      onLanguageOverrideChange={handleLanguageOverrideChange}
+                      highlightQuery={highlightQuery}
+                      occurrenceIndex={highlightIndex}
+                      focusRequest={highlightRequest}
+                      onOccurrencesChange={setHighlightTotal}
+                      onSymbolSelect={handleCodeSymbolSelect}
+                    />
+                  </>
                 ) : selectedFileContent.kind === 'image' ? (
                   <div className="image-viewer">
                     <img
@@ -813,10 +880,33 @@ function App() {
                 </span>
               ) : null}
             </div>
+            <div className="inspector-language-row">
+              <span className="inspector-language-label">Analyzer</span>
+              <select
+                className="inspector-language-select"
+                value={selectedLanguageOverride ?? ''}
+                disabled={!selectedFilePath}
+                onChange={(event) =>
+                  handleLanguageOverrideChange(
+                    event.target.value
+                      ? (event.target.value as LanguageId)
+                      : null
+                  )
+                }
+              >
+                <option value="">Auto</option>
+                {LANGUAGE_DEFINITIONS.map((language) => (
+                  <option key={language.id} value={language.id}>
+                    {language.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <InspectorPanel
             filePath={selectedFilePath}
             fileContent={selectedFileContent}
+            forcedLanguageId={selectedLanguageOverride}
             onRevealSymbol={handleRevealSymbol}
             onDetailFocus={handleDetailFocus}
             occurrenceIndex={highlightIndex}

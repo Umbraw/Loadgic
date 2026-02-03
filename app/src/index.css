@@ -252,6 +252,36 @@ body {
   min-width: 0;
 }
 
+.inspector-language-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inspector-language-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.inspector-language-select {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 11px;
+}
+
+.inspector-language-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .inspector-title-row {
   display: flex;
   align-items: center;
@@ -1435,6 +1465,23 @@ body,
   position: relative;
 }
 
+.file-viewer-actions {
+  font-size: 11px;
+  color: var(--text);
+  letter-spacing: 0.02em;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  width: 100%;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
 .file-viewer-header {
   font-size: 13px;
   color: var(--text);
@@ -1501,6 +1548,14 @@ body,
   letter-spacing: 0.02em;
 }
 
+.file-viewer-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .file-viewer-body {
   flex: 1;
   overflow: auto;
@@ -1526,6 +1581,46 @@ body,
   border-radius: 8px;
   background: #0b0d11;
   position: relative;
+}
+
+.file-language-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 10px;
+  max-width: 240px;
+  align-self: center;
+}
+
+.file-language-label {
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.file-language-dropdown {
+  flex: 0 0 auto;
+  min-width: 0;
+  width: auto;
+  padding: 2px 8px 2px 6px;
+  border-radius: 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 10px;
+  appearance: auto;
+  -webkit-appearance: menulist;
+  -moz-appearance: menulist;
+}
+
+.file-language-dropdown option {
+  background: var(--bg-panel);
+  color: var(--text);
 }
 
 .image-viewer {

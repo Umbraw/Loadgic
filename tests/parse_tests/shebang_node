@@ -1,0 +1,16 @@
+#!/usr/bin/env node
+// Shebang-based Node.js demo (no extension).
+
+export function multiply(a, b) {
+  return a * b
+}
+
+export class Greeter {
+  constructor(name) {
+    this.name = name
+  }
+
+  greet() {
+    return `Hello ${this.name}`
+  }
+}

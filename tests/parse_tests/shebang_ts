@@ -1,0 +1,13 @@
+#!/usr/bin/env ts-node
+// Shebang-based TS demo (no extension).
+
+export type Status = 'ok' | 'error'
+
+export interface Result {
+  status: Status
+  value: number
+}
+
+export function compute(x: number, y: number): Result {
+  return { status: 'ok', value: x + y }
+}

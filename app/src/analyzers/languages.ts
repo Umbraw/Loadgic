@@ -142,6 +142,20 @@ export const LANGUAGE_DEFINITIONS: LanguageDefinition[] = [
 const EXTENSION_TO_LANGUAGE = new Map<string, LanguageId>()
 const LANGUAGE_BY_ID = new Map<LanguageId, LanguageDefinition>()
 
+const SHEBANG_LANGUAGE_MAP: Record<string, LanguageId> = {
+  python: 'python',
+  python3: 'python',
+  python2: 'python',
+  node: 'javascript',
+  nodejs: 'javascript',
+  bun: 'javascript',
+  deno: 'typescript',
+  'ts-node': 'typescript',
+  tsx: 'tsx',
+  ruby: 'ruby',
+  php: 'php',
+}
+
 LANGUAGE_DEFINITIONS.forEach((language) => {
   LANGUAGE_BY_ID.set(language.id, language)
   language.extensions.forEach((ext) => {
@@ -153,6 +167,35 @@ export function getLanguageForFile(filePath: string): LanguageId | null {
   const match = filePath.toLowerCase().match(/\.([a-z0-9]+)$/)
   if (!match) return null
   return EXTENSION_TO_LANGUAGE.get(`.${match[1]}`) ?? null
+}
+
+export function detectLanguageFromShebang(
+  content: string
+): LanguageId | null {
+  const firstLine = content.split(/\r?\n/, 1)[0]?.trim()
+  if (!firstLine || !firstLine.startsWith('#!')) return null
+
+  const shebang = firstLine.slice(2).trim()
+  if (!shebang) return null
+
+  const parts = shebang.split(/\s+/)
+  let command = parts[0] ?? ''
+  const envIndex = parts.findIndex((part) => part.endsWith('env'))
+  if (envIndex >= 0 && parts[envIndex + 1]) {
+    command = parts[envIndex + 1]
+  }
+  const normalized = command.split('/').pop()?.toLowerCase() ?? ''
+  if (!normalized) return null
+  return SHEBANG_LANGUAGE_MAP[normalized] ?? null
+}
+
+export function getLanguageForFileWithContent(
+  filePath: string,
+  content: string
+): LanguageId | null {
+  const byExtension = getLanguageForFile(filePath)
+  if (byExtension) return byExtension
+  return detectLanguageFromShebang(content)
 }
 
 export function getLanguageDefinition(id: LanguageId): LanguageDefinition | null {

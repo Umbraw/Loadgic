@@ -1,5 +1,6 @@
 import { analyzeFileContent, type AnalysisSettings } from '../analyzers'
 import { setTreeSitterBaseUrl } from '../analyzers/treeSitterAnalyzer'
+import type { LanguageId } from '../analyzers/languages'
 
 type RequestMessage = {
   id: number
@@ -7,6 +8,7 @@ type RequestMessage = {
   content: string
   settings?: AnalysisSettings
   baseUrl?: string
+  overrideLanguageId?: LanguageId | null
 }
 
 type ResponseMessage = {
@@ -65,7 +67,12 @@ async function handleMessage(event: MessageEvent<RequestMessage>) {
     return
   }
 
-  const outline = await analyzeFileContent(filePath, content, settings)
+  const outline = await analyzeFileContent(
+    filePath,
+    content,
+    settings,
+    event.data.overrideLanguageId ?? null
+  )
   touchCache(cacheKey, outline)
   const response: ResponseMessage = {
     id,
