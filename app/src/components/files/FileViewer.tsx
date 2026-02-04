@@ -23,7 +23,12 @@ import {
   type Extension,
   type Text,
 } from '@codemirror/state'
-import { Decoration, EditorView, ViewPlugin } from '@codemirror/view'
+import {
+  Decoration,
+  EditorView,
+  ViewPlugin,
+  type DecorationSet,
+} from '@codemirror/view'
 import { useTheme } from '../../theme/ThemeProvider'
 import {
   detectLanguageFromShebang,
@@ -219,7 +224,7 @@ function createHighlightExtension(query: string) {
   if (!query.trim()) return []
   return ViewPlugin.fromClass(
     class {
-      decorations
+      decorations: DecorationSet
       constructor(view: EditorView) {
         this.decorations = buildHighlightDecorations(view, query)
         const activeIndex = view.state.facet(activeIndexFacet)
