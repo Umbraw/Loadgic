@@ -332,6 +332,11 @@ export default function InspectorPanel({
     line: number
     column: number
     hover: string
+    documentation: string
+    docParams?: { name: string; description: string }[]
+    symbolKind: number | null
+    symbolName: string | null
+    containerPath: string[]
     signature: string
     signatureActiveParam: number | null
     definitions: { uri: string; range: { start: { line: number; character: number } } }[]
@@ -340,6 +345,8 @@ export default function InspectorPanel({
     symbolCounts: Record<string, number>
     references: number
     diagnostics: number
+    error?: string
+    errorMessage?: string
   } | null>(null)
   const [pyDetailLoading, setPyDetailLoading] = useState(false)
   const tsDetailReqRef = useRef(0)
@@ -483,7 +490,7 @@ export default function InspectorPanel({
         setPyDetail(null)
         setPyDetailLoading(false)
       }
-    }, 1500)
+    }, 3000)
     fetchDetail
       .then((detail) => {
         if (timedOut || pyDetailReqRef.current !== reqId) return
@@ -891,162 +898,176 @@ export default function InspectorPanel({
             <div className="inspector-detail-hint">Loading Python details…</div>
           ) : pyDetail ? (
             <>
+              {pyDetail.error ? (
+                <div className="inspector-detail-hint">
+                  Python details unavailable ({pyDetail.error}
+                  {pyDetail.errorMessage ? `: ${pyDetail.errorMessage}` : ''}).
+                </div>
+              ) : null}
               {renderDetailCard(
-                'py-detail',
-                'Python detail',
+                'py-overview',
+                'Symbol overview',
                 <div className="inspector-detail-grid">
-                <div>
-                  <div className="inspector-detail-key">Hover</div>
-                  <div className="inspector-detail-value">
-                    {pyDetail.hover || '—'}
-                  </div>
-                </div>
-                <div>
-                  <div className="inspector-detail-key">Location</div>
-                  <div className="inspector-detail-value">
-                    Line {pyDetail.line}, Col {pyDetail.column}
-                  </div>
-                </div>
-                <div>
-                  <div className="inspector-detail-key">Symbols</div>
-                  <div className="inspector-detail-value">
-                    {Object.values(pyDetail.symbolCounts ?? {}).reduce(
-                      (sum, value) => sum + value,
-                      0
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="inspector-detail-key">References</div>
-                  <div className="inspector-detail-value">
-                    {pyDetail.references}
-                  </div>
-                </div>
-                <div>
-                  <div className="inspector-detail-key">Highlights</div>
-                  <div className="inspector-detail-value">
-                    {pyDetail.highlights}
-                  </div>
-                </div>
-                <div>
-                  <div className="inspector-detail-key">Diagnostics</div>
-                  <div className="inspector-detail-value">
-                    {pyDetail.diagnostics}
-                  </div>
-                </div>
-              </div>
-            )}
-            {pyDetail.symbolCounts &&
-            Object.keys(pyDetail.symbolCounts).length
-              ? renderDetailCard(
-                  'py-breakdown',
-                  'Symbol breakdown',
-                  <div className="inspector-detail-code">
-                    {(() => {
-                      const entries = Object.entries(pyDetail.symbolCounts).map(
-                        ([kind, count]) => ({
-                          kind: Number(kind),
-                          label: mapSymbolKind(Number(kind)),
-                          count,
-                        })
-                      )
-                      const total = entries.reduce(
-                        (sum, item) => sum + item.count,
-                        0
-                      )
-                      const top = [...entries]
-                        .sort((a, b) => b.count - a.count)
-                        .slice(0, 4)
-                      const summary = top
-                        .map((item) => `${item.count} ${item.label.toLowerCase()}`)
-                        .join(', ')
-                      const grouped: Record<string, number> = {
-                        'Classes/Types': 0,
-                        Functions: 0,
-                        Variables: 0,
-                      }
-                      entries.forEach((item) => {
-                        if ([5, 10, 11, 23, 26].includes(item.kind)) {
-                          grouped['Classes/Types'] += item.count
-                        } else if ([6, 9, 12].includes(item.kind)) {
-                          grouped.Functions += item.count
-                        } else if ([7, 8, 13, 14].includes(item.kind)) {
-                          grouped.Variables += item.count
-                        }
-                      })
-                      return (
-                        <>
-                          <div className="inspector-detail-hint">
-                            {total} symbols detected — top: {summary || '—'}
-                          </div>
-                          <div className="inspector-detail-snippet">
-                            {Object.entries(grouped)
-                              .filter(([, count]) => count > 0)
-                              .map(([label, count]) => `${label}: ${count}`)
-                              .join(' • ') || '—'}
-                          </div>
-                        </>
-                      )
-                    })()}
-                    <div className="inspector-detail-snippet">
-                      {Object.entries(pyDetail.symbolCounts)
-                        .map(([kind, count]) => ({
-                          label: mapSymbolKind(Number(kind)),
-                          count,
-                        }))
-                        .sort((a, b) => b.count - a.count)
-                        .map(({ label, count }) => `${label}: ${count}`)
-                        .join(' • ')}
+                  <div>
+                    <div className="inspector-detail-key">Symbol</div>
+                    <div className="inspector-detail-value">
+                      {pyDetail.symbolName ?? pyDetail.symbol}
                     </div>
                   </div>
-                )
-              : null}
-            {pyDetail.signature
-              ? renderDetailCard(
-                  'py-signature',
-                  'Signature',
-                  <>
-                    <div className="inspector-detail-snippet">
-                      {pyDetail.signature}
+                  <div>
+                    <div className="inspector-detail-key">Kind</div>
+                    <div className="inspector-detail-value">
+                      {typeof pyDetail.symbolKind === 'number'
+                        ? mapSymbolKind(pyDetail.symbolKind)
+                        : '—'}
                     </div>
-                    {typeof pyDetail.signatureActiveParam === 'number' ? (
-                      <div className="inspector-detail-hint">
-                        Active parameter: {pyDetail.signatureActiveParam + 1}
+                  </div>
+                  <div>
+                    <div className="inspector-detail-key">Container</div>
+                    <div className="inspector-detail-value">
+                      {pyDetail.containerPath?.length
+                        ? pyDetail.containerPath.join(' / ')
+                        : '—'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="inspector-detail-key">Location</div>
+                    <div className="inspector-detail-value">
+                      Line {pyDetail.line}, Col {pyDetail.column}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {pyDetail.signature
+                ? renderDetailCard(
+                    'py-signature',
+                    'Signature',
+                    <>
+                      <div className="inspector-detail-snippet">
+                        {pyDetail.signature}
                       </div>
-                    ) : null}
-                  </>
-                )
-              : null}
-            {pyDetail.definitions?.length
-              ? renderDetailCard(
-                  'py-definition',
-                  'Definition',
-                  (() => {
-                    const def = pyDetail.definitions[0]
-                    const loc = formatLspLocation(
-                      def.uri,
-                      def.range.start.line,
-                      def.range.start.character
-                    )
-                    return <div className="inspector-detail-snippet">{loc.title}</div>
-                  })()
-                )
-              : null}
-            {pyDetail.typeDefinitions?.length
-              ? renderDetailCard(
-                  'py-type-definition',
-                  'Type definition',
-                  (() => {
-                    const def = pyDetail.typeDefinitions[0]
-                    const loc = formatLspLocation(
-                      def.uri,
-                      def.range.start.line,
-                      def.range.start.character
-                    )
-                    return <div className="inspector-detail-snippet">{loc.title}</div>
-                  })()
-                )
-              : null}
+                      {typeof pyDetail.signatureActiveParam === 'number' ? (
+                        <div className="inspector-detail-hint">
+                          Active parameter: {pyDetail.signatureActiveParam + 1}
+                        </div>
+                      ) : null}
+                    </>
+                  )
+                : null}
+              {renderDetailCard(
+                'py-doc',
+                'Documentation',
+                <>
+                  <div className="inspector-detail-snippet">
+                    {pyDetail.documentation ||
+                      pyDetail.hover ||
+                      'No documentation available.'}
+                  </div>
+                  {pyDetail.docParams && pyDetail.docParams.length ? (
+                    <div className="inspector-detail-table">
+                      <div className="inspector-detail-table-head">
+                        <span>Param</span>
+                        <span>Description</span>
+                      </div>
+                      {pyDetail.docParams.map((param) => (
+                        <div
+                          key={`${param.name}-${param.description}`}
+                          className="inspector-detail-table-row"
+                        >
+                          <span>{param.name}</span>
+                          <span>{param.description || '—'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              )}
+              {renderDetailCard(
+                'py-usage',
+                'Usage',
+                <>
+                  <div className="inspector-detail-grid">
+                    <div>
+                      <div className="inspector-detail-key">Occurrences</div>
+                      <div className="inspector-detail-value">
+                        {pyDetail.references || pyDetail.highlights || 0}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="inspector-detail-key">Focus</div>
+                      <div className="inspector-detail-value">
+                        {typeof occurrenceIndex === 'number' &&
+                        typeof occurrenceTotal === 'number' &&
+                        occurrenceTotal > 0
+                          ? `${occurrenceIndex + 1} / ${occurrenceTotal}`
+                          : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="inspector-detail-key">Diagnostics</div>
+                      <div className="inspector-detail-value">
+                        {pyDetail.diagnostics}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="inspector-detail-actions">
+                    <button
+                      className="inspector-detail-action"
+                      type="button"
+                      onClick={() => onStepOccurrence?.('prev')}
+                      disabled={!onStepOccurrence}
+                    >
+                      Prev occurrence
+                    </button>
+                    <button
+                      className="inspector-detail-action"
+                      type="button"
+                      onClick={() => onStepOccurrence?.('next')}
+                      disabled={!onStepOccurrence}
+                    >
+                      Next occurrence
+                    </button>
+                  </div>
+                </>
+              )}
+              {pyDetail.definitions?.length
+                ? renderDetailCard(
+                    'py-definition',
+                    'Definition',
+                    (() => {
+                      const def = pyDetail.definitions[0]
+                      const loc = formatLspLocation(
+                        def.uri,
+                        def.range.start.line,
+                        def.range.start.character
+                      )
+                      return (
+                        <div className="inspector-detail-snippet">
+                          {loc.title}
+                        </div>
+                      )
+                    })()
+                  )
+                : null}
+              {pyDetail.typeDefinitions?.length
+                ? renderDetailCard(
+                    'py-type-definition',
+                    'Type definition',
+                    (() => {
+                      const def = pyDetail.typeDefinitions[0]
+                      const loc = formatLspLocation(
+                        def.uri,
+                        def.range.start.line,
+                        def.range.start.character
+                      )
+                      return (
+                        <div className="inspector-detail-snippet">
+                          {loc.title}
+                        </div>
+                      )
+                    })()
+                  )
+                : null}
             </>
           ) : (
             <div className="inspector-detail-hint">

@@ -207,6 +207,130 @@ type LspDocumentSymbol = {
   children?: LspDocumentSymbol[]
 }
 
+type LspSymbolInformation = {
+  name: string
+  kind: number
+  location?: { range?: LspDocumentSymbol['range'] }
+}
+
+type PyHoverInfo = {
+  signature: string
+  documentation: string
+}
+
+function parsePyHover(text: string): PyHoverInfo {
+  if (!text) return { signature: '', documentation: '' }
+  const cleaned = text.replace(/^---\s*\n?/m, '').trim()
+  if (!cleaned) return { signature: '', documentation: '' }
+  const codeBlockMatch = cleaned.match(/```python\s*([\s\S]*?)```/i)
+  if (codeBlockMatch) {
+    const signature = codeBlockMatch[1].trim()
+    const documentation = cleaned
+      .replace(codeBlockMatch[0], '')
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+    return { signature, documentation }
+  }
+  const lines = cleaned
+    .split('\n')
+    .map((line) => line.replace(/&nbsp;/g, ' ').trim())
+    .filter(Boolean)
+  if (!lines.length) return { signature: '', documentation: '' }
+  if (lines.length === 1) return { signature: lines[0], documentation: '' }
+  return { signature: lines[0], documentation: lines.slice(1).join(' ') }
+}
+
+function parsePyDocParams(doc: string) {
+  if (!doc) return { doc: '', params: [] as { name: string; description: string }[] }
+  const match = doc.match(/Args:\s*([\s\S]*)/i)
+  if (!match) return { doc, params: [] as { name: string; description: string }[] }
+  const lines = match[1]
+    .split('\n')
+    .map((line) => line.replace(/&nbsp;/g, ' ').trim())
+    .filter(Boolean)
+  const params: { name: string; description: string }[] = []
+  for (const line of lines) {
+    const parts = line.split(':')
+    if (parts.length >= 2) {
+      const name = parts.shift()?.trim() ?? ''
+      const description = parts.join(':').trim()
+      if (name) params.push({ name, description })
+    }
+  }
+  const cleaned = doc.split(/Args:\s*/i)[0]?.trim() ?? ''
+  return { doc: cleaned, params }
+}
+
+function rangeContains(
+  range: LspDocumentSymbol['range'],
+  line: number,
+  column: number
+) {
+  if (line < range.start.line) return false
+  if (line > range.end.line) return false
+  if (line === range.start.line && column < range.start.character) return false
+  if (line === range.end.line && column > range.end.character) return false
+  return true
+}
+
+function collectSymbolCandidates(
+  symbols: LspDocumentSymbol[],
+  path: string[] = []
+): { symbol: LspDocumentSymbol; container: string[]; span: number }[] {
+  const entries: { symbol: LspDocumentSymbol; container: string[]; span: number }[] =
+    []
+  for (const symbol of symbols) {
+    const span =
+      (symbol.range.end.line - symbol.range.start.line) * 10000 +
+      (symbol.range.end.character - symbol.range.start.character)
+    entries.push({ symbol, container: path, span })
+    if (symbol.children?.length) {
+      entries.push(...collectSymbolCandidates(symbol.children, [...path, symbol.name]))
+    }
+  }
+  return entries
+}
+
+function findSymbolAtPosition(
+  symbols: LspDocumentSymbol[],
+  line: number,
+  column: number
+): { symbol: LspDocumentSymbol; container: string[] } | null {
+  const candidates = collectSymbolCandidates(symbols).filter((entry) =>
+    rangeContains(entry.symbol.range, line, column)
+  )
+  if (!candidates.length) return null
+  candidates.sort((a, b) => a.span - b.span)
+  return { symbol: candidates[0].symbol, container: candidates[0].container }
+}
+
+function normalizeDocumentSymbols(
+  items: (LspDocumentSymbol | LspSymbolInformation)[] | null | undefined
+): LspDocumentSymbol[] {
+  if (!items) return []
+  return items
+    .map((item) => {
+      const range =
+        'range' in item && item.range
+          ? item.range
+          : item.location?.range
+      if (!range) return null
+      const children =
+        'children' in item && Array.isArray(item.children)
+          ? normalizeDocumentSymbols(item.children)
+          : undefined
+      return {
+        name: item.name,
+        kind: item.kind,
+        range,
+        children,
+      }
+    })
+    .filter((item): item is LspDocumentSymbol => !!item)
+}
+
 class LspClient {
   private proc: ChildProcessWithoutNullStreams
   private seq = 0
@@ -279,9 +403,22 @@ class LspClient {
     if (this.ready) return
     const rootUri = pathToFileURL(rootPath).toString()
     await this.send('initialize', {
+      processId: process.pid,
+      clientInfo: { name: 'Loadgic', version: app.getVersion() },
       rootUri,
       workspaceFolders: [{ uri: rootUri, name: path.basename(rootPath) }],
-      capabilities: {},
+      capabilities: {
+        textDocument: {
+          hover: { contentFormat: ['markdown', 'plaintext'] },
+          definition: {},
+          references: {},
+          typeDefinition: {},
+          signatureHelp: {},
+          documentSymbol: {},
+          documentHighlight: {},
+        },
+      },
+      initializationOptions: {},
     })
     this.notify('initialized', {})
     this.ready = true
@@ -977,10 +1114,14 @@ ipcMain.handle(
     line?: number,
     column?: number
   ) => {
-    if (!currentProjectRoot) return null
-    const resolvedRoot = path.resolve(currentProjectRoot)
     const resolvedFile = path.resolve(filePath)
-    if (!resolvedFile.startsWith(resolvedRoot + path.sep)) {
+    const resolvedRoot = currentProjectRoot
+      ? path.resolve(currentProjectRoot)
+      : path.dirname(resolvedFile)
+    if (
+      currentProjectRoot &&
+      !resolvedFile.startsWith(resolvedRoot + path.sep)
+    ) {
       return null
     }
     if (!symbol || typeof symbol !== 'string') return null
@@ -998,8 +1139,29 @@ ipcMain.handle(
       }
 
       const lsp = ensurePyLsp()
-      if (!lsp) return null
-      await lsp.initialize(currentProjectRoot)
+      if (!lsp) {
+        return {
+          symbol,
+          line: position.line,
+          column: position.column,
+          hover: '',
+          documentation: '',
+          symbolKind: null,
+          symbolName: null,
+          containerPath: [],
+          signature: '',
+          signatureActiveParam: null,
+          definitions: [],
+          typeDefinitions: [],
+          highlights: 0,
+          symbolCounts: {},
+          references: 0,
+          diagnostics: 0,
+          error: 'pyright-unavailable',
+          errorMessage: 'Pyright LSP not available.',
+        }
+      }
+      await lsp.initialize(resolvedRoot)
       lsp.openFile(resolvedFile, content, 'python')
 
       let hover: LspHover | null = null
@@ -1011,21 +1173,42 @@ ipcMain.handle(
       let sig: LspSignatureHelp | null = null
       let diags: { message: string }[] = []
       try {
-        ;[hover, defs, refs, typeDefs, highlights, symbols, sig, diags] = await withTimeout(
-          Promise.all([
-            lsp.hover(resolvedFile, position.line, position.column),
-            lsp.definition(resolvedFile, position.line, position.column),
-            lsp.references(resolvedFile, position.line, position.column),
-            lsp.typeDefinition(resolvedFile, position.line, position.column),
-            lsp.documentHighlight(resolvedFile, position.line, position.column),
-            lsp.documentSymbol(resolvedFile),
-            lsp.signatureHelp(resolvedFile, position.line, position.column),
-            lsp.diagnostics(resolvedFile),
-          ]),
-          1500
-        )
-      } catch {
-        // ignore LSP timeout
+        ;[hover, defs, refs, typeDefs, highlights, symbols, sig, diags] =
+          await withTimeout(
+            Promise.all([
+              lsp.hover(resolvedFile, position.line, position.column),
+              lsp.definition(resolvedFile, position.line, position.column),
+              lsp.references(resolvedFile, position.line, position.column),
+              lsp.typeDefinition(resolvedFile, position.line, position.column),
+              lsp.documentHighlight(resolvedFile, position.line, position.column),
+              lsp.documentSymbol(resolvedFile),
+              lsp.signatureHelp(resolvedFile, position.line, position.column),
+              lsp.diagnostics(resolvedFile),
+            ]),
+            4000
+          )
+      } catch (error) {
+        return {
+          symbol,
+          line: position.line,
+          column: position.column,
+          hover: '',
+          documentation: '',
+          symbolKind: null,
+          symbolName: null,
+          containerPath: [],
+          signature: '',
+          signatureActiveParam: null,
+          definitions: [],
+          typeDefinitions: [],
+          highlights: 0,
+          symbolCounts: {},
+          references: 0,
+          diagnostics: 0,
+          error: 'pyright-timeout',
+          errorMessage:
+            error instanceof Error ? error.message : 'Pyright request failed.',
+        }
       }
 
       const hoverText =
@@ -1036,7 +1219,12 @@ ipcMain.handle(
           : (hover?.contents as { kind?: string; value?: string } | undefined)
               ?.value ?? ''
 
-      const signature = sig?.signatures?.[sig.activeSignature ?? 0]?.label ?? ''
+      const hoverParsed = parsePyHover(hoverText)
+      const signature =
+        sig?.signatures?.[sig.activeSignature ?? 0]?.label ??
+        hoverParsed.signature
+
+      const normalizedSymbols = normalizeDocumentSymbols(symbols as any)
 
       const symbolCounts: Record<string, number> = {}
       const flattenSymbols = (items: LspDocumentSymbol[]) => {
@@ -1046,13 +1234,25 @@ ipcMain.handle(
           if (item.children?.length) flattenSymbols(item.children)
         }
       }
-      flattenSymbols(symbols)
+      flattenSymbols(normalizedSymbols)
+      const symbolAtPosition = findSymbolAtPosition(
+        normalizedSymbols,
+        position.line,
+        position.column
+      )
+
+      const parsedDoc = parsePyDocParams(hoverParsed.documentation)
 
       return {
         symbol,
         line: position.line,
         column: position.column,
         hover: hoverText,
+        documentation: parsedDoc.doc,
+        docParams: parsedDoc.params,
+        symbolKind: symbolAtPosition?.symbol.kind ?? null,
+        symbolName: symbolAtPosition?.symbol.name ?? null,
+        containerPath: symbolAtPosition?.container ?? [],
         signature,
         signatureActiveParam: sig?.activeParameter ?? null,
         definitions: defs,
@@ -1062,8 +1262,28 @@ ipcMain.handle(
         references: refs.length,
         diagnostics: diags.length,
       }
-    } catch {
-      return null
+    } catch (error) {
+      return {
+        symbol,
+        line: line ?? 1,
+        column: column ?? 1,
+        hover: '',
+        documentation: '',
+        symbolKind: null,
+        symbolName: null,
+        containerPath: [],
+        signature: '',
+        signatureActiveParam: null,
+        definitions: [],
+        typeDefinitions: [],
+        highlights: 0,
+        symbolCounts: {},
+        references: 0,
+        diagnostics: 0,
+        error: 'pyright-error',
+        errorMessage:
+          error instanceof Error ? error.message : 'Pyright detail failed.',
+      }
     }
   }
 )
