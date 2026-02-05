@@ -110,6 +110,217 @@ function recordVariableFromDeclarator(
   if (name) variables.push(name)
 }
 
+function normalizePythonDocstring(raw: string) {
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+$/g, ''))
+  while (lines.length && !lines[0].trim()) lines.shift()
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop()
+  if (!lines.length) return ''
+
+  function isNumpySection(index: number) {
+    if (index < 0 || index + 1 >= lines.length) return false
+    const title = lines[index].trim()
+    const underline = lines[index + 1].trim()
+    return (
+      title.length > 0 &&
+      underline.length >= title.length &&
+      /^-+$/.test(underline)
+    )
+  }
+
+  function emitParagraph(target: string[], chunk: string[]) {
+    const text = chunk.join('\n').trim()
+    if (text) target.push(text)
+  }
+
+  function normalizeNumpy() {
+    const output: string[] = []
+    let index = 0
+    const intro: string[] = []
+    while (index < lines.length && !isNumpySection(index)) {
+      intro.push(lines[index].trim())
+      index += 1
+    }
+    emitParagraph(output, intro)
+    while (index < lines.length) {
+      if (!isNumpySection(index)) {
+        index += 1
+        continue
+      }
+      const title = lines[index].trim()
+      output.push(`### ${title}`)
+      index += 2
+      const sectionLines: string[] = []
+      while (index < lines.length && !isNumpySection(index)) {
+        sectionLines.push(lines[index])
+        index += 1
+      }
+      const key = title.toLowerCase()
+      if (['parameters', 'returns', 'yields', 'raises'].includes(key)) {
+        let i = 0
+        while (i < sectionLines.length) {
+          const line = sectionLines[i]
+          if (!line.trim()) {
+            i += 1
+            continue
+          }
+          if (/^\s+/.test(line)) {
+            i += 1
+            continue
+          }
+          const header = line.trim()
+          const [name, type] = header.split(/\s*:\s*/, 2)
+          i += 1
+          const desc: string[] = []
+          while (i < sectionLines.length) {
+            const next = sectionLines[i]
+            if (!next.trim()) {
+              i += 1
+              if (desc.length) break
+              continue
+            }
+            if (!/^\s+/.test(next)) break
+            desc.push(next.trim())
+            i += 1
+          }
+          const detail = desc.join(' ')
+          const typeText = type ? ` (*${type}*)` : ''
+          output.push(
+            `- \`${name}\`${typeText}${detail ? `: ${detail}` : ''}`
+          )
+        }
+      } else {
+        emitParagraph(output, sectionLines.map((line) => line.trim()))
+      }
+    }
+    return output.join('\n\n').trim()
+  }
+
+  function normalizeGoogle() {
+    const output: string[] = []
+    let index = 0
+    const intro: string[] = []
+    while (index < lines.length && !/^\s*\w+:\s*$/.test(lines[index])) {
+      intro.push(lines[index].trim())
+      index += 1
+    }
+    emitParagraph(output, intro)
+    while (index < lines.length) {
+      const headerMatch = lines[index].match(/^\s*(\w+):\s*$/)
+      if (!headerMatch) {
+        index += 1
+        continue
+      }
+      const title = headerMatch[1]
+      output.push(`### ${title}`)
+      index += 1
+      const entries: string[] = []
+      while (index < lines.length && !/^\s*\w+:\s*$/.test(lines[index])) {
+        entries.push(lines[index])
+        index += 1
+      }
+      let i = 0
+      while (i < entries.length) {
+        const line = entries[i]
+        if (!line.trim()) {
+          i += 1
+          continue
+        }
+        if (!/^\s+/.test(line)) {
+          i += 1
+          continue
+        }
+        const trimmed = line.trim()
+        const [namePart, descPart] = trimmed.split(/\s*:\s*/, 2)
+        const nameMatch = namePart.match(/^(\w+)(?:\s*\(([^)]+)\))?$/)
+        if (nameMatch) {
+          const [, name, type] = nameMatch
+          const descLines: string[] = []
+          if (descPart) descLines.push(descPart)
+          i += 1
+          while (i < entries.length) {
+            const next = entries[i]
+            if (!next.trim()) {
+              i += 1
+              if (descLines.length) break
+              continue
+            }
+            if (!/^\s+/.test(next)) break
+            descLines.push(next.trim())
+            i += 1
+          }
+          const detail = descLines.join(' ')
+          const typeText = type ? ` (*${type}*)` : ''
+          output.push(
+            `- \`${name}\`${typeText}${detail ? `: ${detail}` : ''}`
+          )
+        } else {
+          i += 1
+        }
+      }
+    }
+    return output.join('\n\n').trim()
+  }
+
+  if (lines.some((_, index) => isNumpySection(index))) {
+    return normalizeNumpy()
+  }
+  if (lines.some((line) => /^\s*\w+:\s*$/.test(line))) {
+    return normalizeGoogle()
+  }
+  if (lines.some((line) => /^\s*:(param|return|rtype|raises)\b/.test(line))) {
+    const output: string[] = []
+    const intro: string[] = []
+    lines.forEach((line) => {
+      if (!/^\s*:(param|return|rtype|raises)\b/.test(line)) {
+        intro.push(line.trim())
+      }
+    })
+    emitParagraph(output, intro)
+    const params: string[] = []
+    let returnText = ''
+    let returnType = ''
+    const raises: string[] = []
+    lines.forEach((line) => {
+      const trimmed = line.trim()
+      const paramMatch = trimmed.match(/^:param\s+(\w+)\s*:\s*(.+)$/)
+      if (paramMatch) {
+        params.push(`- \`${paramMatch[1]}\`: ${paramMatch[2].trim()}`)
+        return
+      }
+      const returnMatch = trimmed.match(/^:return:\s*(.+)$/)
+      if (returnMatch) {
+        returnText = returnMatch[1].trim()
+        return
+      }
+      const rtypeMatch = trimmed.match(/^:rtype:\s*(.+)$/)
+      if (rtypeMatch) {
+        returnType = rtypeMatch[1].trim()
+        return
+      }
+      const raisesMatch = trimmed.match(/^:raises\s+(\w+)\s*:\s*(.+)$/)
+      if (raisesMatch) {
+        raises.push(`- \`${raisesMatch[1]}\`: ${raisesMatch[2].trim()}`)
+      }
+    })
+    if (params.length) {
+      output.push('### Parameters', params.join('\n'))
+    }
+    if (returnText || returnType) {
+      const line = returnType
+        ? `- \`${returnType}\`${returnText ? `: ${returnText}` : ''}`
+        : `- ${returnText}`
+      output.push('### Returns', line)
+    }
+    if (raises.length) {
+      output.push('### Raises', raises.join('\n'))
+    }
+    return output.join('\n\n').trim()
+  }
+  return lines.join('\n').trim()
+}
+
 function extractPythonDocstring(node: Parser.SyntaxNode) {
   const block = node.namedChildren.find((child) => child.type === 'block')
   if (!block) return null
@@ -120,7 +331,7 @@ function extractPythonDocstring(node: Parser.SyntaxNode) {
   const raw = stringNode.text.trim()
   const match = raw.match(/^([rubfRUBF]*)(['"]{3}|['"])([\s\S]*?)\2$/)
   if (!match) return null
-  const cleaned = match[3].trim()
+  const cleaned = normalizePythonDocstring(match[3].trim())
   if (!cleaned) return null
   return { source: 'docstring' as const, markdown: cleaned }
 }

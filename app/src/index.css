@@ -1731,6 +1731,9 @@ body,
   min-width: 0;
   max-height: 100%;
   overflow: auto;
+  position: sticky;
+  top: 0;
+  align-self: start;
 }
 
 .file-viewer-docs-content h1,

@@ -99,6 +99,7 @@ function App() {
   const fileDocWorkerRef = useRef<Worker | null>(null)
   const fileDocReqRef = useRef(0)
   const [fileDocSelectedId, setFileDocSelectedId] = useState<string | null>(null)
+  const fileDocContentRef = useRef<HTMLDivElement | null>(null)
   const [inspectorExternalDetail, setInspectorExternalDetail] = useState<{
     value: string
     line?: number
@@ -722,7 +723,13 @@ function App() {
       column: symbol.range.startCol,
       occurrenceIndex: occurrenceIndex >= 0 ? occurrenceIndex : undefined,
     })
+    fileDocContentRef.current?.scrollTo({ top: 0 })
     setFileViewTab('code')
+  }
+
+  function handleDocListSelect(symbolId: string) {
+    setFileDocSelectedId(symbolId)
+    fileDocContentRef.current?.scrollTo({ top: 0 })
   }
 
   async function handleCopyDocMarkdown() {
@@ -1009,7 +1016,7 @@ function App() {
                                       ? ' active'
                                       : ''
                                   }`}
-                                  onClick={() => setFileDocSelectedId(symbol.id)}
+                                  onClick={() => handleDocListSelect(symbol.id)}
                                 >
                                   <span className="file-viewer-docs-kind">
                                     {symbol.kind}
@@ -1023,7 +1030,10 @@ function App() {
                                 </button>
                               ))}
                             </div>
-                            <div className="file-viewer-docs-content">
+                            <div
+                              className="file-viewer-docs-content"
+                              ref={fileDocContentRef}
+                            >
                               {selectedDocSymbol?.doc?.markdown ? (
                                 <DocRenderer
                                   markdown={selectedDocSymbol.doc.markdown}
