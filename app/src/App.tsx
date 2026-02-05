@@ -45,6 +45,7 @@ function App() {
   const [highlightTotal, setHighlightTotal] = useState(0)
   const [highlightIndex, setHighlightIndex] = useState<number | null>(null)
   const [highlightRequest, setHighlightRequest] = useState(0)
+  const [fileViewTab, setFileViewTab] = useState<'code' | 'docs'>('code')
   const [inspectorExternalDetail, setInspectorExternalDetail] = useState<{
     value: string
     line?: number
@@ -717,67 +718,101 @@ function App() {
             />
           ) : activeView === 'files' && selectedFilePath ? (
             <div className="file-viewer">
+              <div className="file-viewer-tabs">
+                <button
+                  className={`file-viewer-tab${
+                    fileViewTab === 'code' ? ' active' : ''
+                  }`}
+                  type="button"
+                  onClick={() => setFileViewTab('code')}
+                >
+                  Code
+                </button>
+                <button
+                  className={`file-viewer-tab${
+                    fileViewTab === 'docs' ? ' active' : ''
+                  }`}
+                  type="button"
+                  onClick={() => setFileViewTab('docs')}
+                >
+                  Documentation
+                </button>
+              </div>
               {selectedFileContent ? (
                 selectedFileContent.kind === 'text' ? (
-                  <>
-                    <div className="file-viewer-actions">
-                      <div className="file-language-select">
-                        <span className="file-language-label">Analyzer</span>
-                        <select
-                          className="file-language-dropdown"
-                          value={selectedLanguageOverride ?? ''}
-                          onChange={(event) =>
-                            handleLanguageOverrideChange(
-                              event.target.value
-                                ? (event.target.value as LanguageId)
-                                : null
-                            )
-                          }
-                        >
-                          <option value="">Auto</option>
-                          {LANGUAGE_DEFINITIONS.map((language) => (
-                            <option key={language.id} value={language.id}>
-                              {language.label}
-                            </option>
-                          ))}
-                        </select>
+                  fileViewTab === 'code' ? (
+                    <>
+                      <div className="file-viewer-actions">
+                        <div className="file-language-select">
+                          <span className="file-language-label">Analyzer</span>
+                          <select
+                            className="file-language-dropdown"
+                            value={selectedLanguageOverride ?? ''}
+                            onChange={(event) =>
+                              handleLanguageOverrideChange(
+                                event.target.value
+                                  ? (event.target.value as LanguageId)
+                                  : null
+                              )
+                            }
+                          >
+                            <option value="">Auto</option>
+                            {LANGUAGE_DEFINITIONS.map((language) => (
+                              <option key={language.id} value={language.id}>
+                                {language.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="file-viewer-header">
+                        {selectedFilePath ? (
+                          <>
+                            <button
+                              className="file-viewer-copy"
+                              onClick={() => copyPathToClipboard(selectedFilePath)}
+                              aria-label="Copy full path"
+                              title="Copy full path"
+                              type="button"
+                            >
+                              <span className="file-viewer-copy-icon">⧉</span>
+                              <span className="file-viewer-copy-label">Copy</span>
+                            </button>
+                            <span className="file-viewer-path">
+                              {splitPath(selectedFilePath).dir}
+                              {splitPath(selectedFilePath).dir ? '/' : ''}
+                            </span>
+                            <span className="file-viewer-name">
+                              {splitPath(selectedFilePath).name}
+                            </span>
+                          </>
+                        ) : null}
+                      </div>
+                      <FileViewer
+                        content={selectedFileContent.content}
+                        filePath={selectedFilePath}
+                        forcedLanguageId={selectedLanguageOverride}
+                        onLanguageOverrideChange={handleLanguageOverrideChange}
+                        highlightQuery={highlightQuery}
+                        occurrenceIndex={highlightIndex}
+                        focusRequest={highlightRequest}
+                        onOccurrencesChange={setHighlightTotal}
+                        onSymbolSelect={handleCodeSymbolSelect}
+                      />
+                    </>
+                  ) : (
+                    <div className="file-viewer-docs">
+                      <div className="file-viewer-docs-inner">
+                        <div className="file-viewer-docs-title">
+                          Documentation
+                        </div>
+                        <div className="file-viewer-docs-text">
+                          This tab will host file documentation extracted from
+                          the code. It is a placeholder for now.
+                        </div>
                       </div>
                     </div>
-                    <div className="file-viewer-header">
-                      {selectedFilePath ? (
-                        <>
-                          <button
-                            className="file-viewer-copy"
-                            onClick={() => copyPathToClipboard(selectedFilePath)}
-                            aria-label="Copy full path"
-                            title="Copy full path"
-                            type="button"
-                          >
-                            <span className="file-viewer-copy-icon">⧉</span>
-                            <span className="file-viewer-copy-label">Copy</span>
-                          </button>
-                          <span className="file-viewer-path">
-                            {splitPath(selectedFilePath).dir}
-                            {splitPath(selectedFilePath).dir ? '/' : ''}
-                          </span>
-                          <span className="file-viewer-name">
-                            {splitPath(selectedFilePath).name}
-                          </span>
-                        </>
-                      ) : null}
-                    </div>
-                    <FileViewer
-                      content={selectedFileContent.content}
-                      filePath={selectedFilePath}
-                      forcedLanguageId={selectedLanguageOverride}
-                      onLanguageOverrideChange={handleLanguageOverrideChange}
-                      highlightQuery={highlightQuery}
-                      occurrenceIndex={highlightIndex}
-                      focusRequest={highlightRequest}
-                      onOccurrencesChange={setHighlightTotal}
-                      onSymbolSelect={handleCodeSymbolSelect}
-                    />
-                  </>
+                  )
                 ) : selectedFileContent.kind === 'image' ? (
                   <div className="image-viewer">
                     <img

@@ -1068,7 +1068,6 @@ button.inspector-chip:hover,
   width: 100%;
   height: 100%;
 }
-
 .content {
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
@@ -1465,6 +1464,30 @@ body,
   position: relative;
 }
 
+.file-viewer-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+}
+
+.file-viewer-tab {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.file-viewer-tab.active {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--bg-panel);
+}
+
 .file-viewer-actions {
   font-size: 11px;
   color: var(--text);
@@ -1581,6 +1604,37 @@ body,
   border-radius: 8px;
   background: #0b0d11;
   position: relative;
+}
+
+.file-viewer-docs {
+  flex: 1;
+  padding: 16px;
+  overflow: auto;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.file-viewer-docs-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.file-viewer-docs-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.file-viewer-docs-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
 }
 
 .file-language-select {
