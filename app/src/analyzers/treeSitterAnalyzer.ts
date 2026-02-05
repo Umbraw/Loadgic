@@ -110,7 +110,54 @@ function recordVariableFromDeclarator(
   if (name) variables.push(name)
 }
 
-function analyzePython(tree: Parser.Tree): Outline {
+function extractPythonDocstring(node: Parser.SyntaxNode) {
+  const block = node.namedChildren.find((child) => child.type === 'block')
+  if (!block) return null
+  const first = block.namedChildren[0]
+  if (!first || first.type !== 'expression_statement') return null
+  const stringNode = first.namedChildren.find((child) => child.type === 'string')
+  if (!stringNode) return null
+  const raw = stringNode.text.trim()
+  const match = raw.match(/^([rubfRUBF]*)(['"]{3}|['"])([\s\S]*?)\2$/)
+  if (!match) return null
+  const cleaned = match[3].trim()
+  if (!cleaned) return null
+  return { source: 'docstring' as const, markdown: cleaned }
+}
+
+function generatePythonDocTemplate(
+  kind: 'function' | 'class',
+  name: string,
+  filePath: string,
+  node: Parser.SyntaxNode
+) {
+  const location = `${filePath}:${node.startPosition.row + 1}`
+  if (kind === 'function') {
+    const paramsText = node.childForFieldName('parameters')?.text ?? '()'
+    return [
+      `## ${name}`,
+      `**Type:** function`,
+      `**Location:** ${location}`,
+      `### Signature`,
+      `\`def ${name}${paramsText}\``,
+      `### Description`,
+      `_(Auto-generated)_`,
+      `### Notes`,
+      `Add a docstring above the function to override this section.`,
+    ].join('\n')
+  }
+  return [
+    `## ${name}`,
+    `**Type:** class`,
+    `**Location:** ${location}`,
+    `### Members`,
+    `_(Not extracted yet)_`,
+    `### Notes`,
+    `Add a docstring above the class to override this section.`,
+  ].join('\n')
+}
+
+function analyzePython(tree: Parser.Tree, filePath: string, content: string): Outline {
   const outline = emptyOutline()
   const imports: string[] = []
   const importBindings: string[] = []
@@ -120,6 +167,7 @@ function analyzePython(tree: Parser.Tree): Outline {
   const fromImports: string[] = []
   const decorators: string[] = []
   const methods: string[] = []
+  const symbols: SymbolInfo[] = []
 
   function walk(node: Parser.SyntaxNode) {
     switch (node.type) {
@@ -146,6 +194,27 @@ function analyzePython(tree: Parser.Tree): Outline {
       case 'function_definition': {
         const name = collectNamedChildText(node, 'name')
         if (name) functions.push(name)
+        if (name) {
+          const doc =
+            extractPythonDocstring(node) ??
+            ({
+              source: 'generated',
+              markdown: generatePythonDocTemplate('function', name, filePath, node),
+            } as const)
+          symbols.push({
+            id: `${filePath}::function::${name}::${node.startPosition.row + 1}`,
+            kind: 'function',
+            name,
+            filePath,
+            range: {
+              startLine: node.startPosition.row + 1,
+              startCol: node.startPosition.column + 1,
+              endLine: node.endPosition.row + 1,
+              endCol: node.endPosition.column + 1,
+            },
+            doc,
+          })
+        }
         break
       }
       case 'class_definition': {
@@ -166,6 +235,25 @@ function analyzePython(tree: Parser.Tree): Outline {
           }
         })
         classes.push({ name, methods: unique(classMethods) })
+        const doc =
+          extractPythonDocstring(node) ??
+          ({
+            source: 'generated',
+            markdown: generatePythonDocTemplate('class', name, filePath, node),
+          } as const)
+        symbols.push({
+          id: `${filePath}::class::${name}::${node.startPosition.row + 1}`,
+          kind: 'class',
+          name,
+          filePath,
+          range: {
+            startLine: node.startPosition.row + 1,
+            startCol: node.startPosition.column + 1,
+            endLine: node.endPosition.row + 1,
+            endCol: node.endPosition.column + 1,
+          },
+          doc,
+        })
         break
       }
       case 'assignment': {
@@ -194,6 +282,7 @@ function analyzePython(tree: Parser.Tree): Outline {
   outline.functions = unique(functions)
   outline.classes = classes.sort((a, b) => a.name.localeCompare(b.name))
   outline.variables = unique(variables)
+  outline.symbols = symbols
   outline.pyOverview = {
     imports: unique(imports),
     fromImports: unique(fromImports),
@@ -1323,7 +1412,7 @@ export async function analyzeWithTreeSitter(
 
   switch (languageId) {
     case 'python':
-      return analyzePython(tree)
+      return analyzePython(tree, filePath, content)
     case 'javascript':
       return analyzeJavaScript(tree, filePath, 'js')
     case 'jsx':
