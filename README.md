@@ -37,6 +37,7 @@ This project is built with:
 
 * Project folder import and tree explorer  
 * File viewer with syntax highlighting (CodeMirror)  
+* File viewer Documentation tab (rendered Markdown from Tree-sitter symbols, with internal symbol links)  
 * Binary files are detected and skipped in the viewer  
 * Manual analyzer override (per-file) for unknown/no-extension files  
 * Inspector: structural analysis for multiple languages (JS/TS, Python, Go, Rust, Java, C/C++, C#, PHP, Ruby, JSON, YAML)  

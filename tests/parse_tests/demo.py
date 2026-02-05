@@ -1,4 +1,4 @@
-"""Loadgic Python demo with rich symbols for inspector testing."""
+"""Loadgic Python demo with a realistic mix of comment styles."""
 
 from __future__ import annotations
 
@@ -8,8 +8,11 @@ from pathlib import Path
 from typing import Iterable, Iterator, Optional, Protocol, TypedDict, Literal
 
 
+# Module-level note: this file mixes docstyles seen in real projects.
+
+
 class Status(str, Enum):
-    """Simple status enum."""
+    """Status values used by the demo."""
 
     OK = "ok"
     ERROR = "error"
@@ -22,6 +25,8 @@ class SupportsLen(Protocol):
 
 
 class Config(TypedDict):
+    """Typed dictionary for configuration."""
+
     name: str
     retries: int
     debug: bool
@@ -33,7 +38,7 @@ class User:
 
     name: str
     age: int
-    tags: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)  # trailing comment
 
     @property
     def is_adult(self) -> bool:
@@ -41,15 +46,36 @@ class User:
 
         return self.age >= 18
 
+    # Google-style docstring
     def greet(self, loud: bool = False) -> str:
         """Formats a greeting message.
 
         Args:
             loud: If true, returns uppercase.
+
+        Returns:
+            The greeting string.
         """
 
         msg = f"Hello, {self.name}"
         return msg.upper() if loud else msg
+
+    # NumPy-style docstring
+    def nickname(self, suffix: str = "!") -> str:
+        """Build a nickname.
+
+        Parameters
+        ----------
+        suffix : str
+            Suffix appended to name.
+
+        Returns
+        -------
+        str
+            Nickname with suffix.
+        """
+
+        return f"{self.name}{suffix}"
 
     @classmethod
     def guest(cls) -> "User":
@@ -59,6 +85,12 @@ class User:
 
     @staticmethod
     def normalize_name(name: str) -> str:
+        """Normalize a name.
+
+        :param name: Raw input name.
+        :return: Normalized version.
+        """
+
         return name.strip().title()
 
 
@@ -66,23 +98,35 @@ class Counter:
     """Simple counter with a custom iterator."""
 
     def __init__(self, start: int = 0) -> None:
+        # NOTE: We keep internal value private.
         self._value = start
 
     def inc(self) -> int:
+        """Increment by one and return the new value."""
+
         self._value += 1
         return self._value
 
     def __iter__(self) -> Iterator[int]:
+        """Infinite iterator."""
+
         while True:
             yield self.inc()
 
 
+# reST / Sphinx style (often used in older codebases)
+# :param path: path or string
+# :return: Path instance
+# :raises ValueError: if empty
 def ensure_path(path: str | Path) -> Path:
     """Ensures a Path instance."""
 
+    if not path:
+        raise ValueError("Empty path")
     return path if isinstance(path, Path) else Path(path)
 
 
+# Short comment above a helper
 def add(a: int, b: int) -> int:
     """Adds two numbers together."""
 
@@ -103,28 +147,19 @@ async def fetch_status(code: int) -> Status:
     return Status.OK if code == 200 else Status.ERROR
 
 
-def use_len(obj: SupportsLen) -> int:
-    """Uses a protocol-typed object."""
-
-    return len(obj)
-
-
-def choose_mode(mode: Literal["fast", "safe"]) -> str:
-    """Accepts a literal type."""
-
-    return mode
-
-
 class AppError(Exception):
     """Custom exception."""
 
 
-def risky(value: int) -> int:
-    """Raises on negative values."""
+def choose_mode(mode: Literal["fast", "safe"]) -> str:
+    """Accepts a literal type.
 
-    if value < 0:
-        raise AppError("Negative value")
-    return value
+    Examples:
+        >>> choose_mode("fast")
+        'fast'
+    """
+
+    return mode
 
 
 def main() -> None:
@@ -134,6 +169,7 @@ def main() -> None:
     user = User(name="Alice", age=30)
     counter = Counter()
     print(user.greet())
+    print(user.nickname("?"))
     print(counter.inc())
     print(config["name"], choose_mode("fast"))
 

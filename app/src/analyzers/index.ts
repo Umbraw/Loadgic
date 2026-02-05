@@ -37,5 +37,5 @@ export async function analyzeFileContent(
   }
 
   if (settings.engine !== 'tree-sitter') return null
-  return analyzeWithTreeSitter(languageId, content)
+  return analyzeWithTreeSitter(languageId, content, filePath)
 }

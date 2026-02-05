@@ -1,11 +1,19 @@
 import Sidebar from './components/sidebar/ActivityBar'
 import SidePanel from './components/sidebar/SidePanel'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import type { ViewMode } from './types/view'
 import type { ProjectNode } from './types/project'
 import type { FileContent } from './types/file'
 import appLogo from './assets/logo/logo_512_512.png'
 import FileViewer from './components/files/FileViewer'
+import DocRenderer from './components/files/DocRenderer'
 import LogicView from './components/logic/LogicView'
 import type { LogicViewHandle } from './components/logic/LogicView'
 import InspectorPanel from './components/inspector/InspectorPanel'
@@ -13,6 +21,8 @@ import {
   LANGUAGE_DEFINITIONS,
   type LanguageId,
 } from './analyzers/languages'
+import type { SymbolInfo } from './analyzers/types'
+import { useTheme } from './theme/ThemeProvider'
 
 const SIDEBAR_WIDTH = 54
 const MIN_PANEL_WIDTH = 220
@@ -20,7 +30,45 @@ const MIN_INSPECTOR_WIDTH = 265
 const COLLAPSE_THRESHOLD = 140
 const MIN_CONTENT_WIDTH = 200
 
+function isIdentifierChar(value: string) {
+  return /[A-Za-z0-9_$]/.test(value)
+}
+
+function collectMatches(text: string, query: string) {
+  const matches: { from: number; to: number }[] = []
+  if (!query) return matches
+  let index = 0
+  while (index < text.length) {
+    const next = text.indexOf(query, index)
+    if (next === -1) break
+    const from = next
+    const to = next + query.length
+    const before = from > 0 ? text[from - 1] : ''
+    const after = to < text.length ? text[to] : ''
+    if (isIdentifierChar(before) || isIdentifierChar(after)) {
+      index = to
+      continue
+    }
+    matches.push({ from, to })
+    index = to
+  }
+  return matches
+}
+
+function positionFromLineCol(content: string, line: number, column: number) {
+  if (!content) return 0
+  const lines = content.split('\n')
+  const clampedLine = Math.max(1, Math.min(line, lines.length))
+  let offset = 0
+  for (let i = 0; i < clampedLine - 1; i += 1) {
+    offset += lines[i].length + 1
+  }
+  const clampedCol = Math.max(1, Math.min(column, lines[clampedLine - 1].length + 1))
+  return offset + clampedCol - 1
+}
+
 function App() {
+  const { analysisSettings } = useTheme()
   const [activeView, setActiveView] = useState<ViewMode>('files')
   const [isPanelOpen, setIsPanelOpen] = useState(true)
   const [panelWidth, setPanelWidth] = useState(320)
@@ -46,6 +94,11 @@ function App() {
   const [highlightIndex, setHighlightIndex] = useState<number | null>(null)
   const [highlightRequest, setHighlightRequest] = useState(0)
   const [fileViewTab, setFileViewTab] = useState<'code' | 'docs'>('code')
+  const [fileDocSymbols, setFileDocSymbols] = useState<SymbolInfo[]>([])
+  const [fileDocLoading, setFileDocLoading] = useState(false)
+  const fileDocWorkerRef = useRef<Worker | null>(null)
+  const fileDocReqRef = useRef(0)
+  const [fileDocSelectedId, setFileDocSelectedId] = useState<string | null>(null)
   const [inspectorExternalDetail, setInspectorExternalDetail] = useState<{
     value: string
     line?: number
@@ -85,6 +138,16 @@ function App() {
   const selectedLanguageOverride = selectedFilePath
     ? languageOverrides[selectedFilePath] ?? null
     : null
+  const selectedDocSymbol = fileDocSelectedId
+    ? fileDocSymbols.find((symbol) => symbol.id === fileDocSelectedId) ?? null
+    : null
+  const docSymbolNameMap = useMemo(() => {
+    if (!fileDocSymbols.length) return {}
+    return fileDocSymbols.reduce<Record<string, string>>((acc, symbol) => {
+      acc[symbol.id] = symbol.name
+      return acc
+    }, {})
+  }, [fileDocSymbols])
 
   // Select active view
   function selectView(next: ViewMode) {
@@ -135,6 +198,71 @@ function App() {
       setLogicRevealKey((prev) => prev + 1)
     }
   }, [activeView])
+
+  useEffect(() => {
+    const worker = new Worker(
+      new URL('./workers/inspectorWorker.ts', import.meta.url),
+      { type: 'module' }
+    )
+    fileDocWorkerRef.current = worker
+
+    worker.onmessage = (event: MessageEvent) => {
+      const { id, outline } = event.data
+      if (id !== fileDocReqRef.current) return
+      setFileDocSymbols(outline?.symbols ?? [])
+      setFileDocLoading(false)
+    }
+
+    return () => {
+      worker.terminate()
+      fileDocWorkerRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    if (
+      activeView !== 'files' ||
+      !selectedFilePath ||
+      !selectedFileContent ||
+      selectedFileContent.kind !== 'text'
+    ) {
+      setFileDocSymbols([])
+      setFileDocLoading(false)
+      return
+    }
+    const worker = fileDocWorkerRef.current
+    if (!worker) return
+    const nextId = fileDocReqRef.current + 1
+    fileDocReqRef.current = nextId
+    setFileDocLoading(true)
+    worker.postMessage({
+      id: nextId,
+      filePath: selectedFilePath,
+      content: selectedFileContent.content,
+      settings: analysisSettings,
+      baseUrl: window.location.origin,
+      overrideLanguageId: selectedLanguageOverride ?? null,
+    })
+  }, [
+    activeView,
+    selectedFilePath,
+    selectedFileContent,
+    analysisSettings,
+    selectedLanguageOverride,
+  ])
+
+  useEffect(() => {
+    if (!fileDocSymbols.length) {
+      setFileDocSelectedId(null)
+      return
+    }
+    const exists = fileDocSelectedId
+      ? fileDocSymbols.some((symbol) => symbol.id === fileDocSelectedId)
+      : false
+    if (!exists) {
+      setFileDocSelectedId(fileDocSymbols[0].id)
+    }
+  }, [fileDocSymbols, fileDocSelectedId])
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -572,6 +700,48 @@ function App() {
     })
   }
 
+  function handleDocSymbolSelect(symbolId: string) {
+    const symbol = fileDocSymbols.find((entry) => entry.id === symbolId)
+    if (!symbol || !selectedFileContent || selectedFileContent.kind !== 'text') {
+      return
+    }
+    setFileDocSelectedId(symbolId)
+    const content = selectedFileContent.content
+    const position = positionFromLineCol(
+      content,
+      symbol.range.startLine,
+      symbol.range.startCol
+    )
+    const matches = collectMatches(content, symbol.name)
+    const occurrenceIndex = matches.findIndex(
+      (match) => position >= match.from && position <= match.to
+    )
+    handleCodeSymbolSelect({
+      symbol: symbol.name,
+      line: symbol.range.startLine,
+      column: symbol.range.startCol,
+      occurrenceIndex: occurrenceIndex >= 0 ? occurrenceIndex : undefined,
+    })
+    setFileViewTab('code')
+  }
+
+  async function handleCopyDocMarkdown() {
+    if (!selectedDocSymbol?.doc?.markdown) return
+    try {
+      await navigator.clipboard.writeText(selectedDocSymbol.doc.markdown)
+    } catch {
+      const textarea = document.createElement('textarea')
+      textarea.value = selectedDocSymbol.doc.markdown
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+  }
+
   useEffect(() => {
     if (skipHighlightResetRef.current) {
       skipHighlightResetRef.current = false
@@ -803,13 +973,75 @@ function App() {
                   ) : (
                     <div className="file-viewer-docs">
                       <div className="file-viewer-docs-inner">
-                        <div className="file-viewer-docs-title">
-                          Documentation
+                        <div className="file-viewer-docs-header">
+                          <div className="file-viewer-docs-title">
+                            Documentation
+                          </div>
+                          <div className="file-viewer-docs-meta">
+                            {selectedDocSymbol ? (
+                              <span className="file-viewer-docs-source">
+                                Source: {selectedDocSymbol.doc?.source ?? 'unknown'}
+                              </span>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="file-viewer-docs-copy"
+                              onClick={handleCopyDocMarkdown}
+                              disabled={!selectedDocSymbol?.doc?.markdown}
+                            >
+                              Copy Markdown
+                            </button>
+                          </div>
                         </div>
-                        <div className="file-viewer-docs-text">
-                          This tab will host file documentation extracted from
-                          the code. It is a placeholder for now.
-                        </div>
+                        {fileDocLoading ? (
+                          <div className="file-viewer-docs-text">
+                            Analyzing symbols…
+                          </div>
+                        ) : fileDocSymbols.length ? (
+                          <div className="file-viewer-docs-body">
+                            <div className="file-viewer-docs-list">
+                              {fileDocSymbols.map((symbol) => (
+                                <button
+                                  key={symbol.id}
+                                  type="button"
+                                  className={`file-viewer-docs-item${
+                                    symbol.id === fileDocSelectedId
+                                      ? ' active'
+                                      : ''
+                                  }`}
+                                  onClick={() => setFileDocSelectedId(symbol.id)}
+                                >
+                                  <span className="file-viewer-docs-kind">
+                                    {symbol.kind}
+                                  </span>
+                                  <span className="file-viewer-docs-name">
+                                    {symbol.name}
+                                  </span>
+                                  <span className="file-viewer-docs-line">
+                                    L{symbol.range.startLine}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                            <div className="file-viewer-docs-content">
+                              {selectedDocSymbol?.doc?.markdown ? (
+                                <DocRenderer
+                                  markdown={selectedDocSymbol.doc.markdown}
+                                  symbolNames={docSymbolNameMap}
+                                  onSelectSymbol={handleDocSymbolSelect}
+                                />
+                              ) : (
+                                <div className="file-viewer-docs-text">
+                                  No documentation available for this symbol.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="file-viewer-docs-text">
+                            No symbols detected in this file.
+                          </div>
+                        )}
                       </div>
                     </div>
                   )

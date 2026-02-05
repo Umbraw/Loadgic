@@ -1,4 +1,21 @@
 // Define code outline structure
+export type SymbolInfo = {
+  id: string
+  kind: 'function' | 'class'
+  name: string
+  filePath: string
+  range: {
+    startLine: number
+    startCol: number
+    endLine: number
+    endCol: number
+  }
+  doc?: {
+    source: 'jsdoc' | 'docblock' | 'docstring' | 'generated'
+    markdown: string
+  }
+}
+
 export type Outline = {
   imports: string[]
   importBindings: string[]
@@ -12,6 +29,7 @@ export type Outline = {
   types: string[]
   enums: string[]
   variables: string[]
+  symbols?: SymbolInfo[]
   jsonOverview?: {
     keys: string[]
     objectPaths: string[]

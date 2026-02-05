@@ -1,7 +1,7 @@
 import Parser from 'web-tree-sitter'
 import type { LanguageId } from './languages'
 import { getLanguageDefinition } from './languages'
-import type { Outline } from './types'
+import type { Outline, SymbolInfo } from './types'
 
 let parserReady: Promise<void> | null = null
 let wasmBaseUrl: string | null = null
@@ -999,8 +999,82 @@ function analyzeJson(tree: Parser.Tree): Outline {
   return outline
 }
 
+function extractDocBlock(
+  content: string,
+  nodeStart: number
+): { source: 'jsdoc' | 'docblock'; markdown: string } | null {
+  if (!content || nodeStart <= 0) return null
+  const before = content.slice(0, nodeStart)
+  const docblockMatch = before.match(/\/\*@doc[\s\S]*?@doc\*\/\s*$/)
+  if (docblockMatch) {
+    const raw = docblockMatch[0]
+    const cleaned = raw
+      .replace(/^\/\*@doc\s*/i, '')
+      .replace(/@doc\*\/\s*$/i, '')
+      .trim()
+    const between = before.slice(before.length - raw.length - 1)
+    const gap = between ? content.slice(nodeStart - between.length, nodeStart) : ''
+    if (gap && /[^\s]/.test(gap)) return null
+    if (/\n\s*\n/.test(gap)) return null
+    return { source: 'docblock', markdown: cleaned }
+  }
+
+  const jsdocMatch = before.match(/\/\*\*[\s\S]*?\*\/\s*$/)
+  if (jsdocMatch) {
+    const raw = jsdocMatch[0]
+    const cleaned = raw
+      .replace(/^\/\*\*/i, '')
+      .replace(/\*\/\s*$/i, '')
+      .split('\n')
+      .map((line) => line.replace(/^\s*\*\s?/, ''))
+      .join('\n')
+      .trim()
+    const between = before.slice(before.length - raw.length - 1)
+    const gap = between ? content.slice(nodeStart - between.length, nodeStart) : ''
+    if (gap && /[^\s]/.test(gap)) return null
+    if (/\n\s*\n/.test(gap)) return null
+    return { source: 'jsdoc', markdown: cleaned }
+  }
+
+  return null
+}
+
+function generateDocTemplate(
+  kind: 'function' | 'class',
+  name: string,
+  filePath: string,
+  node: Parser.SyntaxNode
+) {
+  const location = `${filePath}:${node.startPosition.row + 1}`
+  if (kind === 'function') {
+    const paramsText = node.childForFieldName('parameters')?.text ?? '()'
+    return [
+      `## ${name}`,
+      `**Type:** function`,
+      `**Location:** ${location}`,
+      `### Signature`,
+      `\`function ${name}${paramsText}\``,
+      `### Description`,
+      `_(Auto-generated)_`,
+      `### Notes`,
+      `Add JSDoc above the function to override this section.`,
+    ].join('\n')
+  }
+  return [
+    `## ${name}`,
+    `**Type:** class`,
+    `**Location:** ${location}`,
+    `### Members`,
+    `_(Not extracted yet)_`,
+    `### Notes`,
+    `Add JSDoc above the class to override this section.`,
+  ].join('\n')
+}
+
 function analyzeJavaScript(
   tree: Parser.Tree,
+  filePath: string,
+  content: string,
   mode: 'js' | 'jsx' | 'ts' | 'tsx' = 'js'
 ): Outline {
   const outline = emptyOutline()
@@ -1016,6 +1090,7 @@ function analyzeJavaScript(
   const interfaces: string[] = []
   const types: string[] = []
   const enums: string[] = []
+  const symbols: SymbolInfo[] = []
 
   function recordFunctionName(name: string | null) {
     if (!name) return
@@ -1076,6 +1151,27 @@ function analyzeJavaScript(
       case 'function_declaration': {
         const name = collectNamedChildText(node, 'name')
         recordFunctionName(name)
+        if (name) {
+          const doc =
+            extractDocBlock(content, node.startIndex) ??
+            ({
+              source: 'generated',
+              markdown: generateDocTemplate('function', name, filePath, node),
+            } as const)
+          symbols.push({
+            id: `${filePath}::function::${name}::${node.startPosition.row + 1}`,
+            kind: 'function',
+            name,
+            filePath,
+            range: {
+              startLine: node.startPosition.row + 1,
+              startCol: node.startPosition.column + 1,
+              endLine: node.endPosition.row + 1,
+              endCol: node.endPosition.column + 1,
+            },
+            doc,
+          })
+        }
         break
       }
       case 'lexical_declaration':
@@ -1107,6 +1203,25 @@ function analyzeJavaScript(
           }
         })
         classes.push({ name, methods: unique(methods) })
+        const doc =
+          extractDocBlock(content, node.startIndex) ??
+          ({
+            source: 'generated',
+            markdown: generateDocTemplate('class', name, filePath, node),
+          } as const)
+        symbols.push({
+          id: `${filePath}::class::${name}::${node.startPosition.row + 1}`,
+          kind: 'class',
+          name,
+          filePath,
+          range: {
+            startLine: node.startPosition.row + 1,
+            startCol: node.startPosition.column + 1,
+            endLine: node.endPosition.row + 1,
+            endCol: node.endPosition.column + 1,
+          },
+          doc,
+        })
         break
       }
       case 'interface_declaration': {
@@ -1142,6 +1257,7 @@ function analyzeJavaScript(
   outline.hooks = unique(hooks)
   outline.classes = classes.sort((a, b) => a.name.localeCompare(b.name))
   outline.variables = unique(variables)
+  outline.symbols = symbols
   outline.jsOverview = {
     importSources: unique(imports),
     importBindings: unique(importBindings),
@@ -1196,7 +1312,8 @@ function analyzeJavaScript(
 
 export async function analyzeWithTreeSitter(
   languageId: LanguageId,
-  content: string
+  content: string,
+  filePath: string
 ): Promise<Outline | null> {
   const language = await loadLanguage(languageId)
   if (!language) return null
@@ -1208,13 +1325,13 @@ export async function analyzeWithTreeSitter(
     case 'python':
       return analyzePython(tree)
     case 'javascript':
-      return analyzeJavaScript(tree, 'js')
+      return analyzeJavaScript(tree, filePath, 'js')
     case 'jsx':
-      return analyzeJavaScript(tree, 'jsx')
+      return analyzeJavaScript(tree, filePath, 'jsx')
     case 'typescript':
-      return analyzeJavaScript(tree, 'ts')
+      return analyzeJavaScript(tree, filePath, 'ts')
     case 'tsx':
-      return analyzeJavaScript(tree, 'tsx')
+      return analyzeJavaScript(tree, filePath, 'tsx')
     case 'c':
       return analyzeCFamily(tree, 'c')
     case 'cpp':
