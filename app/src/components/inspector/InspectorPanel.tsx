@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FileContent } from '../../types/file'
 import type { Outline } from '../../analyzers/types'
 import {
@@ -7,9 +7,13 @@ import {
   type LanguageId,
 } from '../../analyzers/languages'
 import { useTheme } from '../../theme/ThemeProvider'
+import type { Overlay } from '../../types/overlay'
+import DocRenderer from '../files/DocRenderer'
+import { parseLGDoc } from '../../utils/lgdoc'
 
 // Props for InspectorPanel component
 type Props = {
+  projectRoot?: string | null
   filePath: string | null
   fileContent: FileContent | null
   forcedLanguageId?: LanguageId | null
@@ -153,6 +157,7 @@ function Section({
 
 // InspectorPanel component displaying file analysis
 export default function InspectorPanel({
+  projectRoot,
   filePath,
   fileContent,
   forcedLanguageId,
@@ -335,6 +340,8 @@ export default function InspectorPanel({
   const [hasAnalyzer, setHasAnalyzer] = useState(true)
   const [tsDetail, setTsDetail] = useState<TsDetail | null>(null)
   const [tsDetailLoading, setTsDetailLoading] = useState(false)
+  const [detailOverlays, setDetailOverlays] = useState<Overlay[]>([])
+  const [detailOverlaysLoading, setDetailOverlaysLoading] = useState(false)
   const [pyDetail, setPyDetail] = useState<{
     symbol: string
     line: number
@@ -599,6 +606,55 @@ export default function InspectorPanel({
     ...tabs.filter((tab) => tab.id !== 'overview' && tab.id !== 'selector'),
   ]
 
+  const activeDetail = useMemo(
+    () => tabs.find((tab) => tab.id === activeTab),
+    [tabs, activeTab]
+  )
+
+  const detailSymbolId = useMemo(() => {
+    if (!outline?.symbols || activeTab === 'overview') return null
+    const detailValue = activeDetail?.value
+    if (!detailValue) return null
+    const preferredLine = activeDetail?.line
+    const candidates = outline.symbols.filter(
+      (symbol) => symbol.name === detailValue
+    )
+    if (!candidates.length) return null
+    if (typeof preferredLine === 'number') {
+      const exact = candidates.find(
+        (symbol) => symbol.range.startLine === preferredLine
+      )
+      return exact?.id ?? candidates[0].id
+    }
+    return candidates[0].id
+  }, [outline?.symbols, activeTab, activeDetail])
+
+  useEffect(() => {
+    if (!projectRoot || !detailSymbolId) {
+      setDetailOverlays([])
+      setDetailOverlaysLoading(false)
+      return
+    }
+    const fetchOverlays = window.loadgic?.overlaysList
+    if (!fetchOverlays) return
+    setDetailOverlaysLoading(true)
+    fetchOverlays(projectRoot, detailSymbolId)
+      .then((overlays) => {
+        const normalized = overlays.map((overlay) => {
+          if (overlay.markdown) return overlay
+          const parsed = parseLGDoc(overlay.raw)
+          return { ...overlay, markdown: parsed.markdown }
+        })
+        setDetailOverlays(normalized)
+      })
+      .catch(() => {
+        setDetailOverlays([])
+      })
+      .finally(() => {
+        setDetailOverlaysLoading(false)
+      })
+  }, [projectRoot, detailSymbolId])
+
   const tabsBar = (
     <div className="inspector-tabs" onWheel={handleTabsWheel}>
       {orderedTabs.map((tab) => (
@@ -658,7 +714,7 @@ export default function InspectorPanel({
   }
 
   if (activeTab !== 'overview') {
-    const detailItem = tabs.find((tab) => tab.id === activeTab)?.value
+    const detailItem = activeDetail?.value
     if (!detailItem) {
       return (
         <div className="inspector-body">
@@ -667,6 +723,10 @@ export default function InspectorPanel({
       )
     }
     const extension = languageLabel ?? 'Unknown'
+    const overlayMarkdown = detailOverlays
+      .map((overlay) => overlay.markdown || parseLGDoc(overlay.raw).markdown)
+      .filter(Boolean)
+      .join('\n\n---\n\n')
     return (
       <div className="inspector-body inspector-scroll">
         {tabsBar}
@@ -876,15 +936,6 @@ export default function InspectorPanel({
                     </div>
                   )
                 : null}
-              {tsDetail.snippet
-                ? renderDetailCard(
-                    'ts-declaration',
-                    'Declaration',
-                    <div className="inspector-detail-snippet">
-                      {tsDetail.snippet}
-                    </div>
-                  )
-                : null}
               {typeof tsDetail.tsDiagnostics === 'number'
                 ? renderDetailCard(
                     'ts-diagnostics',
@@ -892,6 +943,28 @@ export default function InspectorPanel({
                     <div className="inspector-detail-snippet">
                       {tsDetail.tsDiagnostics} issue
                       {tsDetail.tsDiagnostics === 1 ? '' : 's'}
+                    </div>
+                  )
+                : null}
+              {detailOverlaysLoading ? (
+                <div className="inspector-detail-hint">
+                  Loading Loadgic details…
+                </div>
+              ) : overlayMarkdown ? (
+                renderDetailCard(
+                  'ts-overlays',
+                  'Loadgic details',
+                  <div className="inspector-detail-markdown">
+                    <DocRenderer markdown={overlayMarkdown} />
+                  </div>
+                )
+              ) : null}
+              {tsDetail.snippet
+                ? renderDetailCard(
+                    'ts-declaration',
+                    'Declaration',
+                    <div className="inspector-detail-snippet">
+                      {tsDetail.snippet}
                     </div>
                   )
                 : null}
@@ -946,6 +1019,19 @@ export default function InspectorPanel({
                   </div>
                 </div>
               )}
+              {detailOverlaysLoading ? (
+                <div className="inspector-detail-hint">
+                  Loading Loadgic details…
+                </div>
+              ) : overlayMarkdown ? (
+                renderDetailCard(
+                  'py-overlays',
+                  'Loadgic details',
+                  <div className="inspector-detail-markdown">
+                    <DocRenderer markdown={overlayMarkdown} />
+                  </div>
+                )
+              ) : null}
               {pyDetail.signature
                 ? renderDetailCard(
                     'py-signature',

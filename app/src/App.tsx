@@ -1416,10 +1416,11 @@ function App() {
               </select>
             </div>
           </div>
-          <InspectorPanel
-            filePath={selectedFilePath}
-            fileContent={selectedFileContent}
-            forcedLanguageId={selectedLanguageOverride}
+        <InspectorPanel
+          projectRoot={projectRoot}
+          filePath={selectedFilePath}
+          fileContent={selectedFileContent}
+          forcedLanguageId={selectedLanguageOverride}
             onRevealSymbol={handleRevealSymbol}
             onDetailFocus={handleDetailFocus}
             occurrenceIndex={highlightIndex}

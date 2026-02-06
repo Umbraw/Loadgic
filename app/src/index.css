@@ -530,6 +530,14 @@ body {
   word-break: break-word;
 }
 
+.inspector-detail-markdown {
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  padding: 10px;
+}
+
 .inspector-detail-value {
   margin-top: 6px;
   font-size: 14px;
