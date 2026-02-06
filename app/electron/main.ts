@@ -1007,7 +1007,7 @@ ipcMain.handle(
     const isAsync = isAsyncNode(best.parent)
     const isGenerator = isGeneratorNode(best.parent)
     const nodeText = best.parent.getText(sourceFile)
-    const snippet = nodeText.length > 180 ? `${nodeText.slice(0, 180)}…` : nodeText
+    const snippet = nodeText
     const jsdoc = getJsDoc(best.parent)
 
     const lineNumber = bestLine + 1
