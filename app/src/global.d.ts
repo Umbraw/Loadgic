@@ -97,6 +97,29 @@ declare global {
           }
         | null
       >
+      overlaysList: (
+        rootPath: string,
+        symbolId?: string
+      ) => Promise<
+        { id: string; target: { type: 'symbol'; symbolId: string }; raw: string; markdown: string; updatedAt: string }[]
+      >
+      overlaysUpsert: (
+        rootPath: string,
+        overlay: {
+          id: string
+          target: { type: 'symbol'; symbolId: string }
+          raw: string
+          markdown: string
+          updatedAt: string
+        }
+      ) => Promise<{
+        id: string
+        target: { type: 'symbol'; symbolId: string }
+        raw: string
+        markdown: string
+        updatedAt: string
+      }>
+      overlaysDelete: (rootPath: string, overlayId: string) => Promise<void>
       openSettingsWindow: () => Promise<void>
       minimizeSettings: () => Promise<void>
       closeSettings: () => Promise<void>

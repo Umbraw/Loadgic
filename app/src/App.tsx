@@ -22,7 +22,9 @@ import {
   type LanguageId,
 } from './analyzers/languages'
 import type { SymbolInfo } from './analyzers/types'
+import type { Overlay } from './types/overlay'
 import { useTheme } from './theme/ThemeProvider'
+import { parseLGDoc } from './utils/lgdoc'
 
 const SIDEBAR_WIDTH = 54
 const MIN_PANEL_WIDTH = 220
@@ -100,6 +102,13 @@ function App() {
   const fileDocReqRef = useRef(0)
   const [fileDocSelectedId, setFileDocSelectedId] = useState<string | null>(null)
   const fileDocContentRef = useRef<HTMLDivElement | null>(null)
+  const [docOverlays, setDocOverlays] = useState<Overlay[]>([])
+  const [docOverlayLoading, setDocOverlayLoading] = useState(false)
+  const [docOverlayEditingId, setDocOverlayEditingId] = useState<string | null>(
+    null
+  )
+  const [docOverlayRaw, setDocOverlayRaw] = useState('')
+  const [docOverlayIsEditing, setDocOverlayIsEditing] = useState(false)
   const [inspectorExternalDetail, setInspectorExternalDetail] = useState<{
     value: string
     line?: number
@@ -149,6 +158,30 @@ function App() {
       return acc
     }, {})
   }, [fileDocSymbols])
+  const overlayPreview = useMemo(() => {
+    if (!docOverlayIsEditing) return null
+    return parseLGDoc(docOverlayRaw).markdown
+  }, [docOverlayIsEditing, docOverlayRaw])
+  const combinedDocMarkdown = useMemo(() => {
+    const base = selectedDocSymbol?.doc?.markdown ?? ''
+    const overlayMarkdown = docOverlays
+      .map((overlay) => overlay.markdown || parseLGDoc(overlay.raw).markdown)
+      .filter(Boolean)
+      .join('\n\n---\n\n')
+    const draft = docOverlayIsEditing && overlayPreview ? overlayPreview : ''
+    const mergedOverlay = [overlayMarkdown, draft].filter(Boolean).join('\n\n---\n\n')
+    if (!mergedOverlay) return base
+    if (!base) return mergedOverlay
+    return `${base}\n\n${mergedOverlay}`
+  }, [selectedDocSymbol, docOverlays, docOverlayIsEditing, overlayPreview])
+  const docHasTitleHeading = useMemo(() => {
+    if (!combinedDocMarkdown) return false
+    const firstLine = combinedDocMarkdown
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0)
+    return !!firstLine && /^#{1,6}\s+/.test(firstLine)
+  }, [combinedDocMarkdown])
 
   // Select active view
   function selectView(next: ViewMode) {
@@ -264,6 +297,35 @@ function App() {
       setFileDocSelectedId(fileDocSymbols[0].id)
     }
   }, [fileDocSymbols, fileDocSelectedId])
+
+  useEffect(() => {
+    if (!projectRoot || !selectedDocSymbol) {
+      setDocOverlays([])
+      setDocOverlayLoading(false)
+      setDocOverlayIsEditing(false)
+      setDocOverlayEditingId(null)
+      setDocOverlayRaw('')
+      return
+    }
+    const fetchOverlays = window.loadgic?.overlaysList
+    if (!fetchOverlays) return
+    setDocOverlayLoading(true)
+    fetchOverlays(projectRoot, selectedDocSymbol.id)
+      .then((overlays) => {
+        const normalized = overlays.map((overlay) => {
+          if (overlay.markdown) return overlay
+          const parsed = parseLGDoc(overlay.raw)
+          return { ...overlay, markdown: parsed.markdown }
+        })
+        setDocOverlays(normalized)
+      })
+      .catch(() => {
+        setDocOverlays([])
+      })
+      .finally(() => {
+        setDocOverlayLoading(false)
+      })
+  }, [projectRoot, selectedDocSymbol])
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -732,6 +794,55 @@ function App() {
     fileDocContentRef.current?.scrollTo({ top: 0 })
   }
 
+  function startAddOverlay() {
+    setDocOverlayIsEditing(true)
+    setDocOverlayEditingId(null)
+    setDocOverlayRaw('')
+  }
+
+  function startEditOverlay(overlay: Overlay) {
+    setDocOverlayIsEditing(true)
+    setDocOverlayEditingId(overlay.id)
+    setDocOverlayRaw(overlay.raw)
+  }
+
+  function cancelOverlayEdit() {
+    setDocOverlayIsEditing(false)
+    setDocOverlayEditingId(null)
+    setDocOverlayRaw('')
+  }
+
+  async function handleSaveOverlay() {
+    if (!projectRoot || !selectedDocSymbol) return
+    const parsed = parseLGDoc(docOverlayRaw)
+    const overlay: Overlay = {
+      id: docOverlayEditingId ?? `${selectedDocSymbol.id}::${Date.now()}`,
+      target: { type: 'symbol', symbolId: selectedDocSymbol.id },
+      raw: docOverlayRaw,
+      markdown: parsed.markdown,
+      updatedAt: new Date().toISOString(),
+    }
+    const saved = await window.loadgic?.overlaysUpsert?.(projectRoot, overlay)
+    if (!saved) return
+    setDocOverlays((prev) => {
+      const next = [...prev]
+      const index = next.findIndex((item) => item.id === saved.id)
+      if (index >= 0) next[index] = saved
+      else next.push(saved)
+      return next
+    })
+    cancelOverlayEdit()
+  }
+
+  async function handleDeleteOverlay(overlayId: string) {
+    if (!projectRoot) return
+    await window.loadgic?.overlaysDelete?.(projectRoot, overlayId)
+    setDocOverlays((prev) => prev.filter((overlay) => overlay.id !== overlayId))
+    if (docOverlayEditingId === overlayId) {
+      cancelOverlayEdit()
+    }
+  }
+
   async function handleCopyDocMarkdown() {
     if (!selectedDocSymbol?.doc?.markdown) return
     try {
@@ -1006,37 +1117,61 @@ function App() {
                           </div>
                         ) : fileDocSymbols.length ? (
                           <div className="file-viewer-docs-body">
-                            <div className="file-viewer-docs-list">
-                              {fileDocSymbols.map((symbol) => (
-                                <button
-                                  key={symbol.id}
-                                  type="button"
-                                  className={`file-viewer-docs-item${
-                                    symbol.id === fileDocSelectedId
-                                      ? ' active'
-                                      : ''
-                                  }`}
-                                  onClick={() => handleDocListSelect(symbol.id)}
-                                >
-                                  <span className="file-viewer-docs-kind">
-                                    {symbol.kind}
-                                  </span>
-                                  <span className="file-viewer-docs-name">
-                                    {symbol.name}
-                                  </span>
-                                  <span className="file-viewer-docs-line">
-                                    L{symbol.range.startLine}
-                                  </span>
-                                </button>
-                              ))}
+                            <div className="file-viewer-docs-sidebar">
+                              <div className="file-viewer-docs-sidebar-header">
+                                <span>Symbols</span>
+                              </div>
+                              <div className="file-viewer-docs-list">
+                                {fileDocSymbols.map((symbol) => (
+                                  <button
+                                    key={symbol.id}
+                                    type="button"
+                                    className={`file-viewer-docs-item${
+                                      symbol.id === fileDocSelectedId
+                                        ? ' active'
+                                        : ''
+                                    }`}
+                                    onClick={() =>
+                                      handleDocListSelect(symbol.id)
+                                    }
+                                  >
+                                    <span className="file-viewer-docs-kind">
+                                      {symbol.kind}
+                                    </span>
+                                    <span className="file-viewer-docs-name">
+                                      {symbol.name}
+                                    </span>
+                                    <span className="file-viewer-docs-line">
+                                      L{symbol.range.startLine}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                             <div
                               className="file-viewer-docs-content"
                               ref={fileDocContentRef}
                             >
-                              {selectedDocSymbol?.doc?.markdown ? (
+                              {selectedDocSymbol && !docHasTitleHeading ? (
+                                <div className="file-viewer-docs-symbol">
+                                  <div className="file-viewer-docs-symbol-name">
+                                    {selectedDocSymbol.name}
+                                  </div>
+                                  <div className="file-viewer-docs-symbol-meta">
+                                    <span>{selectedDocSymbol.kind}</span>
+                                    <span>
+                                      L{selectedDocSymbol.range.startLine}
+                                    </span>
+                                  </div>
+                                  <div className="file-viewer-docs-symbol-meta">
+                                    Source:{' '}
+                                    {selectedDocSymbol.doc?.source ?? 'unknown'}
+                                  </div>
+                                </div>
+                              ) : null}
+                              {combinedDocMarkdown ? (
                                 <DocRenderer
-                                  markdown={selectedDocSymbol.doc.markdown}
+                                  markdown={combinedDocMarkdown}
                                   symbolNames={docSymbolNameMap}
                                   onSelectSymbol={handleDocSymbolSelect}
                                 />
@@ -1045,6 +1180,107 @@ function App() {
                                   No documentation available for this symbol.
                                 </div>
                               )}
+                              {selectedDocSymbol ? (
+                                <div className="file-viewer-docs-overlays">
+                                  <div className="file-viewer-docs-overlays-header">
+                                    <span>Details editor</span>
+                                    <button
+                                      type="button"
+                                      className="file-viewer-docs-action"
+                                      onClick={startAddOverlay}
+                                    >
+                                      Add details
+                                    </button>
+                                  </div>
+                                  {docOverlayLoading ? (
+                                    <div className="file-viewer-docs-text">
+                                      Loading overlays…
+                                    </div>
+                                  ) : docOverlays.length ? (
+                                    <div className="file-viewer-docs-overlays-list">
+                                      {docOverlays.map((overlay, index) => (
+                                        <div
+                                          key={overlay.id}
+                                          className="file-viewer-docs-overlay-item"
+                                        >
+                                          <div className="file-viewer-docs-overlay-title">
+                                            {parseLGDoc(overlay.raw).title ||
+                                              `Overlay ${index + 1}`}
+                                          </div>
+                                          <div className="file-viewer-docs-overlay-actions">
+                                            <button
+                                              type="button"
+                                              className="file-viewer-docs-action"
+                                              onClick={() =>
+                                                startEditOverlay(overlay)
+                                              }
+                                            >
+                                              Edit
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="file-viewer-docs-action danger"
+                                              onClick={() =>
+                                                handleDeleteOverlay(overlay.id)
+                                              }
+                                            >
+                                              Delete
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="file-viewer-docs-text">
+                                      No details yet.
+                                    </div>
+                                  )}
+                                  {docOverlayIsEditing ? (
+                                    <div className="file-viewer-docs-editor">
+                                      <textarea
+                                        className="file-viewer-docs-textarea"
+                                        value={docOverlayRaw}
+                                        onChange={(event) =>
+                                          setDocOverlayRaw(event.target.value)
+                                        }
+                                        placeholder="@title ...\n@summary ...\n@param name ...\n@returns ...\n@example\n..."
+                                      />
+                                      <div className="file-viewer-docs-preview">
+                                        <div className="file-viewer-docs-preview-title">
+                                          Preview
+                                        </div>
+                                        {overlayPreview ? (
+                                          <DocRenderer
+                                            markdown={overlayPreview}
+                                            symbolNames={docSymbolNameMap}
+                                            onSelectSymbol={handleDocSymbolSelect}
+                                          />
+                                        ) : (
+                                          <div className="file-viewer-docs-text">
+                                            Start typing to preview.
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="file-viewer-docs-editor-actions">
+                                        <button
+                                          type="button"
+                                          className="file-viewer-docs-action"
+                                          onClick={handleSaveOverlay}
+                                        >
+                                          Save
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="file-viewer-docs-action"
+                                          onClick={cancelOverlayEdit}
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </div>
                           </div>
                         ) : (

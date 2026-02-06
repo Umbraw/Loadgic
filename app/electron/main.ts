@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import { createRequire } from 'node:module'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
@@ -22,6 +22,58 @@ let settingsWindow: BrowserWindow | null = null
 
 const IGNORED_DIRS = new Set(['.git', 'node_modules'])
 let currentProjectRoot: string | null = null
+
+type Overlay = {
+  id: string
+  target: { type: 'symbol'; symbolId: string }
+  raw: string
+  markdown: string
+  updatedAt: string
+}
+
+type OverlayFile = {
+  version: 1
+  overlays: Overlay[]
+}
+
+function resolveOverlayFile(rootPath: string) {
+  const resolvedRoot = path.resolve(rootPath)
+  if (currentProjectRoot) {
+    const projectRoot = path.resolve(currentProjectRoot)
+    if (resolvedRoot !== projectRoot) {
+      throw new Error('Overlay root path does not match current project.')
+    }
+  }
+  const dirPath = path.join(resolvedRoot, '.loadgic')
+  const filePath = path.join(dirPath, 'annotations.json')
+  if (!filePath.startsWith(resolvedRoot + path.sep)) {
+    throw new Error('Invalid overlay path.')
+  }
+  return { resolvedRoot, dirPath, filePath }
+}
+
+async function readOverlayFile(rootPath: string): Promise<OverlayFile> {
+  const { filePath } = resolveOverlayFile(rootPath)
+  try {
+    const raw = await readFile(filePath, 'utf-8')
+    const parsed = JSON.parse(raw) as OverlayFile
+    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.overlays)) {
+      return { version: 1, overlays: [] }
+    }
+    return parsed
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { version: 1, overlays: [] }
+    }
+    throw error
+  }
+}
+
+async function writeOverlayFile(rootPath: string, data: OverlayFile) {
+  const { dirPath, filePath } = resolveOverlayFile(rootPath)
+  await mkdir(dirPath, { recursive: true })
+  await writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
+}
 const IMAGE_MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -1285,6 +1337,55 @@ ipcMain.handle(
           error instanceof Error ? error.message : 'Pyright detail failed.',
       }
     }
+  }
+)
+
+ipcMain.handle('overlays:list', async (_event, rootPath: string, symbolId?: string) => {
+  if (!rootPath || typeof rootPath !== 'string') return []
+  const data = await readOverlayFile(rootPath)
+  if (symbolId) {
+    return data.overlays.filter(
+      (overlay) =>
+        overlay.target.type === 'symbol' &&
+        overlay.target.symbolId === symbolId
+    )
+  }
+  return data.overlays
+})
+
+ipcMain.handle(
+  'overlays:upsert',
+  async (_event, rootPath: string, overlay: Overlay) => {
+    if (!rootPath || typeof rootPath !== 'string') {
+      throw new Error('Invalid root path.')
+    }
+    if (!overlay || overlay.target?.type !== 'symbol') {
+      throw new Error('Invalid overlay payload.')
+    }
+    const data = await readOverlayFile(rootPath)
+    const updated: Overlay = {
+      ...overlay,
+      updatedAt: new Date().toISOString(),
+    }
+    const index = data.overlays.findIndex((item) => item.id === overlay.id)
+    if (index >= 0) {
+      data.overlays[index] = updated
+    } else {
+      data.overlays.push(updated)
+    }
+    await writeOverlayFile(rootPath, data)
+    return updated
+  }
+)
+
+ipcMain.handle(
+  'overlays:delete',
+  async (_event, rootPath: string, overlayId: string) => {
+    if (!rootPath || typeof rootPath !== 'string') return
+    if (!overlayId) return
+    const data = await readOverlayFile(rootPath)
+    data.overlays = data.overlays.filter((overlay) => overlay.id !== overlayId)
+    await writeOverlayFile(rootPath, data)
   }
 )
 

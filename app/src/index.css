@@ -1676,6 +1676,46 @@ body,
   gap: 12px;
 }
 
+.file-viewer-docs-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.file-viewer-docs-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.file-viewer-docs-symbol {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.file-viewer-docs-symbol-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.file-viewer-docs-symbol-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .file-viewer-docs-list {
   display: flex;
   flex-direction: column;
@@ -1830,6 +1870,112 @@ body,
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 11px;
   color: #facc15;
+}
+
+.file-viewer-docs-overlays {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.file-viewer-docs-overlays-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.file-viewer-docs-overlays-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-viewer-docs-overlay-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.file-viewer-docs-overlay-title {
+  font-size: 12px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.file-viewer-docs-overlay-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.file-viewer-docs-action {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.file-viewer-docs-action.danger {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.file-viewer-docs-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.file-viewer-docs-textarea {
+  min-height: 200px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  padding: 10px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.file-viewer-docs-preview {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  padding: 10px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.file-viewer-docs-preview-title {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.file-viewer-docs-editor-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 1100px) {
+  .file-viewer-docs-editor {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 1100px) {

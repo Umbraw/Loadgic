@@ -24,6 +24,12 @@ contextBridge.exposeInMainWorld('loadgic', {
     line?: number,
     column?: number
   ) => ipcRenderer.invoke('py:detail', filePath, symbol, line, column),
+  overlaysList: (rootPath: string, symbolId?: string) =>
+    ipcRenderer.invoke('overlays:list', rootPath, symbolId),
+  overlaysUpsert: (rootPath: string, overlay: unknown) =>
+    ipcRenderer.invoke('overlays:upsert', rootPath, overlay),
+  overlaysDelete: (rootPath: string, overlayId: string) =>
+    ipcRenderer.invoke('overlays:delete', rootPath, overlayId),
   onMainMessage: (handler: (message: string) => void) => {
     const listener = (_event: IpcRendererEvent, message: string) => {
       handler(message)
