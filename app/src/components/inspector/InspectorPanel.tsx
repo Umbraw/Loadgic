@@ -45,12 +45,20 @@ type TsDetail = {
   tsDisplay?: string
   tsDocs?: string
   tsTags?: string[]
+  tsSignature?: string
+  tsSignatureActiveParam?: number | null
   tsDefinition?: {
     file: string
     start: { line: number; offset: number }
     end: { line: number; offset: number }
   } | null
+  tsTypeDefinition?: {
+    file: string
+    start: { line: number; offset: number }
+    end: { line: number; offset: number }
+  } | null
   tsReferences?: number
+  tsOccurrences?: number
   tsDiagnostics?: number
 }
 

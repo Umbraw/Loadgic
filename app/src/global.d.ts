@@ -67,6 +67,11 @@ declare global {
             line: number
             column: number
             hover: string
+            documentation: string
+            docParams?: { name: string; description: string }[]
+            symbolKind: number | null
+            symbolName: string | null
+            containerPath: string[]
             signature: string
             signatureActiveParam: number | null
             definitions: {
@@ -87,6 +92,8 @@ declare global {
             symbolCounts: Record<string, number>
             references: number
             diagnostics: number
+            error?: string
+            errorMessage?: string
           }
         | null
       >
