@@ -1,7 +1,7 @@
 // Define code outline structure
 export type SymbolInfo = {
   id: string
-  kind: 'function' | 'class'
+  kind: 'function' | 'class' | 'symbol'
   name: string
   filePath: string
   range: {

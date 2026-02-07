@@ -16,7 +16,7 @@ import { java } from '@codemirror/lang-java'
 import { rust } from '@codemirror/lang-rust'
 import { php } from '@codemirror/lang-php'
 import { sql } from '@codemirror/lang-sql'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Facet,
   RangeSetBuilder,
@@ -35,11 +35,19 @@ import {
   LANGUAGE_DEFINITIONS,
   type LanguageId,
 } from '../../analyzers/languages'
+import type { Outline, SymbolInfo } from '../../analyzers/types'
+import type { Overlay } from '../../types/overlay'
+import DocRenderer from './DocRenderer'
+import { parseLGDoc } from '../../utils/lgdoc'
 
 // Props for FileViewer component
 type Props = {
   content: string
   filePath: string
+  projectRoot?: string | null
+  docSymbols?: SymbolInfo[]
+  docOutline?: Outline | null
+  overlayRequest?: { x: number; y: number; nonce: number } | null
   forcedLanguageId?: LanguageId | null
   onLanguageOverrideChange?: (next: LanguageId | null) => void
   highlightQuery?: string | null
@@ -52,6 +60,7 @@ type Props = {
     column: number
     occurrenceIndex?: number
   }) => void
+  onOverlayUpdated?: () => void
 }
 
 const nord = nordInit({})
@@ -206,6 +215,95 @@ function getSymbolAtPosition(doc: Text, pos: number) {
   return symbol
 }
 
+function getSymbolRangeAtPosition(doc: Text, pos: number) {
+  let start = pos
+  let end = pos
+  while (start > 0) {
+    const char = doc.sliceString(start - 1, start)
+    if (!isSymbolChar(char)) break
+    start -= 1
+  }
+  const length = doc.length
+  while (end < length) {
+    const char = doc.sliceString(end, end + 1)
+    if (!isSymbolChar(char)) break
+    end += 1
+  }
+  if (start === end) return null
+  const symbol = doc.sliceString(start, end)
+  if (!symbol.replace(/-/g, '').length) {
+    return null
+  }
+  return { from: start, to: end, text: symbol }
+}
+
+function positionFromLineCol(content: string, line: number, column: number) {
+  const lines = content.split('\n')
+  const clampedLine = Math.max(1, Math.min(line, lines.length))
+  let offset = 0
+  for (let i = 0; i < clampedLine - 1; i += 1) {
+    offset += lines[i].length + 1
+  }
+  const clampedCol = Math.max(
+    1,
+    Math.min(column, lines[clampedLine - 1].length + 1)
+  )
+  return offset + clampedCol - 1
+}
+
+function rangeContains(
+  range: SymbolInfo['range'],
+  line: number,
+  column: number
+) {
+  if (line < range.startLine || line > range.endLine) return false
+  if (line === range.startLine && column < range.startCol) return false
+  if (line === range.endLine && column > range.endCol) return false
+  return true
+}
+
+function resolveSymbolMatch(
+  symbols: SymbolInfo[],
+  name: string,
+  line: number,
+  column: number
+) {
+  const matches = symbols.filter((symbol) => symbol.name === name)
+  if (!matches.length) return null
+  const direct = matches.find((symbol) =>
+    rangeContains(symbol.range, line, column)
+  )
+  if (direct) return direct
+  return matches.sort(
+    (a, b) =>
+      Math.abs(a.range.startLine - line) - Math.abs(b.range.startLine - line)
+  )[0]
+}
+
+function getEligibleSymbolKind(name: string, outline: Outline | null) {
+  if (!outline) return null
+  if (outline.functions?.includes(name) || outline.hooks?.includes(name)) {
+    return 'function' as const
+  }
+  if (outline.classes?.some((entry) => entry.name === name)) {
+    return 'class' as const
+  }
+  if (outline.variables?.includes(name)) {
+    return 'symbol' as const
+  }
+  if (
+    outline.importSources?.includes(name) ||
+    outline.importBindings?.includes(name) ||
+    outline.imports?.includes(name)
+  ) {
+    return 'symbol' as const
+  }
+  if (outline.exports?.includes(name) || outline.exportSources?.includes(name)) {
+    return 'symbol' as const
+  }
+  return null
+}
+
 function buildHighlightDecorations(view: EditorView, query: string) {
   const builder = new RangeSetBuilder<Decoration>()
   if (!query) return builder.finish()
@@ -214,6 +312,36 @@ function buildHighlightDecorations(view: EditorView, query: string) {
     builder.add(from, to, Decoration.mark({ class: 'cm-inspector-highlight' }))
   })
   return builder.finish()
+}
+
+function buildFlashDecorations(range: { from: number; to: number } | null) {
+  const builder = new RangeSetBuilder<Decoration>()
+  if (!range) return builder.finish()
+  builder.add(
+    range.from,
+    range.to,
+    Decoration.mark({ class: 'cm-inspector-flash' })
+  )
+  return builder.finish()
+}
+
+function createFlashExtension(range: { from: number; to: number } | null) {
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet
+
+      constructor(view: EditorView) {
+        this.decorations = buildFlashDecorations(range)
+      }
+
+      update(update: { view: EditorView }) {
+        this.decorations = buildFlashDecorations(range)
+      }
+    },
+    {
+      decorations: (plugin) => plugin.decorations,
+    }
+  )
 }
 
 const activeIndexFacet = Facet.define<number | null, number | null>({
@@ -337,6 +465,10 @@ function createInspectorExtensions(query: string, activeIndex?: number | null) {
 export default function FileViewer({
   content,
   filePath,
+  projectRoot,
+  docSymbols = [],
+  docOutline = null,
+  overlayRequest,
   forcedLanguageId,
   onLanguageOverrideChange,
   highlightQuery,
@@ -344,6 +476,7 @@ export default function FileViewer({
   focusRequest,
   onOccurrencesChange,
   onSymbolSelect,
+  onOverlayUpdated,
 }: Props) {
   const { theme, editorTheme } = useTheme()
   const extensions = useMemo(() => {
@@ -364,6 +497,20 @@ export default function FileViewer({
   )
 
   const [editorView, setEditorView] = useState<EditorView | null>(null)
+  const [inlineToast, setInlineToast] = useState<string | null>(null)
+  const [flashRange, setFlashRange] = useState<{ from: number; to: number } | null>(
+    null
+  )
+  const [inlineOverlay, setInlineOverlay] = useState<{
+    symbol: SymbolInfo
+    overlayId: string | null
+    raw: string
+    title: string
+    x: number
+    y: number
+  } | null>(null)
+  const [inlineOverlayLoading, setInlineOverlayLoading] = useState(false)
+  const editorWrapperRef = useRef<HTMLDivElement | null>(null)
 
   const highlightExtension = useMemo(
     () =>
@@ -372,11 +519,26 @@ export default function FileViewer({
         : [],
     [highlightQuery, occurrenceIndex]
   )
+  const flashExtension = useMemo(
+    () => createFlashExtension(flashRange),
+    [flashRange]
+  )
 
   const matches = useMemo(
     () => (highlightQuery ? collectMatches(content, highlightQuery) : []),
     [content, highlightQuery]
   )
+
+  const showToast = useCallback((message: string) => {
+    setInlineToast(message)
+    window.setTimeout(() => setInlineToast(null), 1500)
+  }, [])
+
+  useEffect(() => {
+    if (!flashRange) return
+    const timer = window.setTimeout(() => setFlashRange(null), 1000)
+    return () => window.clearTimeout(timer)
+  }, [flashRange])
 
   useEffect(() => {
     onOccurrencesChange?.(matches.length)
@@ -409,8 +571,157 @@ export default function FileViewer({
   }, [editorView, matches, occurrenceIndex, focusRequest])
 
 
+  const handleInlineOverlaySave = useCallback(async () => {
+    if (!inlineOverlay || !projectRoot) return
+    const parsed = parseLGDoc(inlineOverlay.raw)
+    const overlay: Overlay = {
+      id: inlineOverlay.overlayId ?? `${inlineOverlay.symbol.id}::${Date.now()}`,
+      target: { type: 'symbol', symbolId: inlineOverlay.symbol.id },
+      raw: inlineOverlay.raw,
+      markdown: parsed.markdown,
+      updatedAt: new Date().toISOString(),
+    }
+    const saved = await window.loadgic?.overlaysUpsert?.(projectRoot, overlay)
+    if (saved) {
+      setInlineOverlay((prev) =>
+        prev ? { ...prev, overlayId: saved.id } : prev
+      )
+      onOverlayUpdated?.()
+      showToast('Saved')
+    }
+  }, [inlineOverlay, projectRoot, onOverlayUpdated, showToast])
+
+  const handleInlineOverlayDelete = useCallback(async () => {
+    if (!inlineOverlay?.overlayId || !projectRoot) return
+    await window.loadgic?.overlaysDelete?.(projectRoot, inlineOverlay.overlayId)
+    setInlineOverlay(null)
+    onOverlayUpdated?.()
+    showToast('Deleted')
+  }, [inlineOverlay, projectRoot, onOverlayUpdated, showToast])
+
+  const setTitleInRaw = useCallback((rawValue: string, nextTitle: string) => {
+    const lines = rawValue.split(/\r?\n/)
+    const titleIndex = lines.findIndex((line) => line.trim().startsWith('@title'))
+    if (titleIndex >= 0) {
+      lines[titleIndex] = `@title ${nextTitle}`.trim()
+      return lines.join('\n')
+    }
+    return [`@title ${nextTitle}`.trim(), ...lines].join('\n')
+  }, [])
+
+  const openInlineEditor = useCallback(
+    async (symbol: SymbolInfo, coords: { x: number; y: number }) => {
+      if (!projectRoot) {
+        showToast('Open a project first.')
+        return
+      }
+      const container = editorWrapperRef.current?.getBoundingClientRect()
+      const panelWidth = 320
+      const panelHeight = 360
+      let nextX = coords.x
+      let nextY = coords.y
+      if (container) {
+        const maxX = container.width - panelWidth - 12
+        nextX = Math.max(12, Math.min(nextX, maxX))
+        nextY = Math.max(12, nextY)
+      }
+      setInlineOverlayLoading(true)
+      try {
+        const overlays = await window.loadgic?.overlaysList?.(
+          projectRoot,
+          symbol.id
+        )
+        const existing = overlays?.[0] ?? null
+        const raw = existing?.raw ?? `@title ${symbol.name}\n@summary `
+        const title = parseLGDoc(raw).title ?? symbol.name
+        setInlineOverlay({
+          symbol,
+          overlayId: existing?.id ?? null,
+          raw,
+          title,
+          x: nextX,
+          y: nextY,
+        })
+      } finally {
+        setInlineOverlayLoading(false)
+      }
+    },
+    [projectRoot, showToast]
+  )
+
   useEffect(() => {
-    if (!editorView || !onSymbolSelect) return
+    if (!overlayRequest || !editorView) return
+    const view = editorView
+    const pos = view.posAtCoords({ x: overlayRequest.x, y: overlayRequest.y })
+    if (pos == null) {
+      showToast('No symbol found')
+      return
+    }
+    const symbolRange = getSymbolRangeAtPosition(view.state.doc, pos)
+    if (!symbolRange) {
+      showToast('No symbol found')
+      return
+    }
+    const line = view.state.doc.lineAt(pos)
+    const match = resolveSymbolMatch(
+      docSymbols,
+      symbolRange.text,
+      line.number,
+      pos - line.from + 1
+    )
+    const eligibleKind = getEligibleSymbolKind(symbolRange.text, docOutline)
+    if (!match && !eligibleKind) {
+      showToast('Only available for imports/exports/classes/functions/hooks/variables')
+      return
+    }
+    const resolvedMatch = match ?? (() => {
+      const startLineInfo = view.state.doc.lineAt(symbolRange.from)
+      const endLineInfo = view.state.doc.lineAt(symbolRange.to)
+      return {
+        id: `${filePath}::symbol::${symbolRange.text}::${startLineInfo.number}`,
+        kind: eligibleKind ?? 'symbol',
+        name: symbolRange.text,
+        filePath,
+        range: {
+          startLine: startLineInfo.number,
+          startCol: symbolRange.from - startLineInfo.from + 1,
+          endLine: endLineInfo.number,
+          endCol: symbolRange.to - endLineInfo.from + 1,
+        },
+      }
+    })()
+    const coords = editorWrapperRef.current?.getBoundingClientRect()
+    const anchorX = coords ? overlayRequest.x - coords.left : overlayRequest.x
+    const anchorY = coords ? overlayRequest.y - coords.top : overlayRequest.y
+    const from = match
+      ? positionFromLineCol(
+          content,
+          match.range.startLine,
+          match.range.startCol
+        )
+      : symbolRange.from
+    const to = match
+      ? positionFromLineCol(
+          content,
+          match.range.endLine,
+          match.range.endCol
+        )
+      : symbolRange.to
+    setFlashRange({ from, to })
+    openInlineEditor(resolvedMatch, { x: anchorX, y: anchorY })
+  }, [
+    overlayRequest?.nonce,
+    editorView,
+    docSymbols,
+    docOutline,
+    content,
+    filePath,
+    openInlineEditor,
+    showToast,
+  ])
+
+  useEffect(() => {
+    if (!editorView) return
     const view = editorView
     const onSelect = onSymbolSelect
 
@@ -439,12 +750,13 @@ export default function FileViewer({
             const occurrenceIndex = matches.findIndex(
               (match) => range.from >= match.from && range.from <= match.to
             )
-            onSelect({
+            onSelect?.({
               symbol: selectedText,
               line: line.number,
               column: range.from - line.from + 1,
               occurrenceIndex: occurrenceIndex >= 0 ? occurrenceIndex : undefined,
             })
+            // Keep ctrl/meta click for selection only (no editor popup)
             return
           }
         }
@@ -457,12 +769,13 @@ export default function FileViewer({
       const occurrenceIndex = matches.findIndex(
         (match) => pos >= match.from && pos <= match.to
       )
-      onSelect({
+      onSelect?.({
         symbol,
         line: line.number,
         column: pos - line.from + 1,
         occurrenceIndex: occurrenceIndex >= 0 ? occurrenceIndex : undefined,
       })
+      // Keep ctrl/meta click for selection only (no editor popup)
     }
 
     const dom = view.dom
@@ -472,12 +785,13 @@ export default function FileViewer({
     }
   }, [editorView, onSymbolSelect])
 
+
   return (
-    <div className="file-viewer-shell">
+    <div className="file-viewer-shell" ref={editorWrapperRef}>
       <CodeMirror
         value={content}
         theme={getEditorTheme(editorTheme, theme === 'dark')}
-        extensions={[...extensions, highlightExtension]}
+        extensions={[...extensions, highlightExtension, flashExtension]}
         readOnly
         editable={false}
         basicSetup={{
@@ -490,6 +804,109 @@ export default function FileViewer({
           setEditorView(view)
         }}
       />
+      {inlineToast ? (
+        <div className="inline-overlay-toast">{inlineToast}</div>
+      ) : null}
+      {inlineOverlay ? (
+        <div
+          className="inline-overlay-editor"
+          style={{ left: inlineOverlay.x, top: inlineOverlay.y }}
+        >
+          <div className="inline-overlay-header">
+            <div className="inline-overlay-title">Loadgic details</div>
+            <button
+              type="button"
+              className="inline-overlay-close"
+              onClick={() => setInlineOverlay(null)}
+            >
+              ✕
+            </button>
+          </div>
+          <div className="inline-overlay-meta">
+            {inlineOverlay.symbol.name} · {inlineOverlay.symbol.kind}
+          </div>
+          {inlineOverlayLoading ? (
+            <div className="inline-overlay-text">Loading…</div>
+          ) : (
+            <>
+              <input
+                className="inline-overlay-input"
+                value={inlineOverlay.title}
+                onChange={(event) => {
+                  const nextTitle = event.target.value
+                  setInlineOverlay((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          title: nextTitle,
+                          raw: setTitleInRaw(prev.raw, nextTitle),
+                        }
+                      : prev
+                  )
+                }}
+                placeholder="Title"
+              />
+              <textarea
+                className="inline-overlay-textarea"
+                value={inlineOverlay.raw}
+                onChange={(event) => {
+                  const nextRaw = event.target.value
+                  const parsed = parseLGDoc(nextRaw)
+                  setInlineOverlay((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          raw: nextRaw,
+                          title: parsed.title ?? prev.title,
+                        }
+                      : prev
+                  )
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault()
+                    setInlineOverlay(null)
+                  }
+                  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                    event.preventDefault()
+                    handleInlineOverlaySave()
+                  }
+                }}
+                placeholder="@title ...\n@summary ...\n@param name ...\n@returns ...\n@example\n..."
+              />
+              <div className="inline-overlay-preview">
+                <div className="inline-overlay-preview-title">Preview</div>
+                <DocRenderer markdown={parseLGDoc(inlineOverlay.raw).markdown} />
+              </div>
+              <div className="inline-overlay-actions">
+                <button
+                  type="button"
+                  className="inline-overlay-action"
+                  onClick={handleInlineOverlaySave}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className="inline-overlay-action"
+                  onClick={() => setInlineOverlay(null)}
+                >
+                  Cancel
+                </button>
+                {inlineOverlay.overlayId ? (
+                  <button
+                    type="button"
+                    className="inline-overlay-action danger"
+                    onClick={handleInlineOverlayDelete}
+                  >
+                    Delete
+                  </button>
+                ) : null}
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }

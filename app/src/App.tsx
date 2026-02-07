@@ -21,7 +21,7 @@ import {
   LANGUAGE_DEFINITIONS,
   type LanguageId,
 } from './analyzers/languages'
-import type { SymbolInfo } from './analyzers/types'
+import type { Outline, SymbolInfo } from './analyzers/types'
 import type { Overlay } from './types/overlay'
 import { useTheme } from './theme/ThemeProvider'
 import { parseLGDoc } from './utils/lgdoc'
@@ -97,11 +97,18 @@ function App() {
   const [highlightRequest, setHighlightRequest] = useState(0)
   const [fileViewTab, setFileViewTab] = useState<'code' | 'docs'>('code')
   const [fileDocSymbols, setFileDocSymbols] = useState<SymbolInfo[]>([])
+  const [fileDocOutline, setFileDocOutline] = useState<Outline | null>(null)
   const [fileDocLoading, setFileDocLoading] = useState(false)
   const fileDocWorkerRef = useRef<Worker | null>(null)
   const fileDocReqRef = useRef(0)
   const [fileDocSelectedId, setFileDocSelectedId] = useState<string | null>(null)
   const fileDocContentRef = useRef<HTMLDivElement | null>(null)
+  const [docOverlayRefreshNonce, setDocOverlayRefreshNonce] = useState(0)
+  const [overlayRequest, setOverlayRequest] = useState<{
+    x: number
+    y: number
+    nonce: number
+  } | null>(null)
   const [docOverlays, setDocOverlays] = useState<Overlay[]>([])
   const [docOverlayLoading, setDocOverlayLoading] = useState(false)
   const [docOverlayEditingId, setDocOverlayEditingId] = useState<string | null>(
@@ -244,6 +251,7 @@ function App() {
       const { id, outline } = event.data
       if (id !== fileDocReqRef.current) return
       setFileDocSymbols(outline?.symbols ?? [])
+      setFileDocOutline(outline ?? null)
       setFileDocLoading(false)
     }
 
@@ -261,6 +269,7 @@ function App() {
       selectedFileContent.kind !== 'text'
     ) {
       setFileDocSymbols([])
+      setFileDocOutline(null)
       setFileDocLoading(false)
       return
     }
@@ -325,7 +334,7 @@ function App() {
       .finally(() => {
         setDocOverlayLoading(false)
       })
-  }, [projectRoot, selectedDocSymbol])
+  }, [projectRoot, selectedDocSymbol, docOverlayRefreshNonce])
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -559,6 +568,15 @@ function App() {
           {
             label: 'Reveal in logic view',
             action: () => setActiveView('logic'),
+          },
+          {
+            label: 'Add Loadgic details',
+            action: () =>
+              setOverlayRequest({
+                x: event.clientX,
+                y: event.clientY,
+                nonce: Date.now(),
+              }),
           },
         ])
       }
@@ -860,6 +878,10 @@ function App() {
     }
   }
 
+  const handleOverlayUpdated = useCallback(() => {
+    setDocOverlayRefreshNonce((prev) => prev + 1)
+  }, [])
+
   useEffect(() => {
     if (skipHighlightResetRef.current) {
       skipHighlightResetRef.current = false
@@ -1079,6 +1101,10 @@ function App() {
                       <FileViewer
                         content={selectedFileContent.content}
                         filePath={selectedFilePath}
+                        projectRoot={projectRoot}
+                        docSymbols={fileDocSymbols}
+                        docOutline={fileDocOutline}
+                        overlayRequest={overlayRequest}
                         forcedLanguageId={selectedLanguageOverride}
                         onLanguageOverrideChange={handleLanguageOverrideChange}
                         highlightQuery={highlightQuery}
@@ -1086,6 +1112,7 @@ function App() {
                         focusRequest={highlightRequest}
                         onOccurrencesChange={setHighlightTotal}
                         onSymbolSelect={handleCodeSymbolSelect}
+                        onOverlayUpdated={handleOverlayUpdated}
                       />
                     </>
                   ) : (
