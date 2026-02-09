@@ -1359,7 +1359,19 @@ ipcMain.handle(
     if (!rootPath || typeof rootPath !== 'string') {
       throw new Error('Invalid root path.')
     }
-    if (!overlay || overlay.target?.type !== 'symbol') {
+    if (!overlay || !overlay.target) {
+      throw new Error('Invalid overlay payload.')
+    }
+    if (
+      overlay.target.type === 'symbol' &&
+      !overlay.target.symbolId
+    ) {
+      throw new Error('Invalid overlay payload.')
+    }
+    if (
+      overlay.target.type === 'range' &&
+      (!overlay.target.filePath || !overlay.target.range)
+    ) {
       throw new Error('Invalid overlay payload.')
     }
     const data = await readOverlayFile(rootPath)

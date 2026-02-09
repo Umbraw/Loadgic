@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Facet,
   RangeSetBuilder,
+  type Range,
   type Extension,
   type Text,
 } from '@codemirror/state'
@@ -27,6 +28,8 @@ import {
   Decoration,
   EditorView,
   ViewPlugin,
+  WidgetType,
+  type ViewUpdate,
   type DecorationSet,
 } from '@codemirror/view'
 import { useTheme } from '../../theme/ThemeProvider'
@@ -251,6 +254,63 @@ function positionFromLineCol(content: string, line: number, column: number) {
   return offset + clampedCol - 1
 }
 
+function positionFromLineColInDoc(doc: Text, line: number, column: number) {
+  const safeLine = Math.max(1, Math.min(line, doc.lines))
+  const info = doc.line(safeLine)
+  const safeCol = Math.max(1, Math.min(column, info.length + 1))
+  return info.from + safeCol - 1
+}
+
+function getCollapsedPreview(markdown: string) {
+  const line = markdown
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .find((item) => item.length)
+  return line ?? 'Loadgic details'
+}
+
+function formatOverlayLabel(value: string) {
+  const cleaned = value.replace(/\s+/g, ' ').trim()
+  if (!cleaned) return 'Selection'
+  if (cleaned.length <= 48) return cleaned
+  return `${cleaned.slice(0, 45)}…`
+}
+
+function getPosFromClientPoint(view: EditorView, x: number, y: number) {
+  const rangeFromPoint = document.caretRangeFromPoint?.(x, y)
+  if (rangeFromPoint && view.dom.contains(rangeFromPoint.startContainer)) {
+    return view.posAtDOM(rangeFromPoint.startContainer, rangeFromPoint.startOffset)
+  }
+  const caretPosition = (document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => {
+      offsetNode: Node
+      offset: number
+    } | null
+  }).caretPositionFromPoint?.(x, y)
+  if (caretPosition && view.dom.contains(caretPosition.offsetNode)) {
+    return view.posAtDOM(caretPosition.offsetNode, caretPosition.offset)
+  }
+  return view.posAtCoords({ x, y })
+}
+
+function createOverlayId(target: Overlay['target']) {
+  if (target.type === 'symbol') {
+    return `${target.symbolId}::${Date.now()}`
+  }
+  const { range } = target
+  return `${target.filePath}::range::${range.startLine}:${range.startCol}-${range.endLine}:${range.endCol}`
+}
+
+type EditorOverlay = {
+  overlay: Overlay
+  range: {
+    startLine: number
+    startCol: number
+    endLine: number
+    endCol: number
+  }
+}
+
 function rangeContains(
   range: SymbolInfo['range'],
   line: number,
@@ -340,6 +400,42 @@ function createFlashExtension(range: { from: number; to: number } | null) {
     },
     {
       decorations: (plugin) => plugin.decorations,
+      eventHandlers: {
+        'overlay-title': (event) => {
+          const detail = (event as CustomEvent<string>).detail ?? ''
+          setInlineOverlay((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  title: detail,
+                  raw: setTitleInRaw(prev.raw, detail),
+                }
+              : prev
+          )
+        },
+        'overlay-raw': (event) => {
+          const detail = (event as CustomEvent<string>).detail ?? ''
+          const parsed = parseLGDoc(detail)
+          setInlineOverlay((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  raw: detail,
+                  title: parsed.title ?? prev.title,
+                }
+              : prev
+          )
+        },
+        'overlay-save': () => {
+          handleInlineOverlaySave()
+        },
+        'overlay-cancel': () => {
+          setInlineOverlay(null)
+        },
+        'overlay-delete': () => {
+          handleInlineOverlayDelete()
+        },
+      },
     }
   )
 }
@@ -441,7 +537,7 @@ function createMarkersExtension(query: string) {
           const ratio = contentHeight <= 1 ? 0 : lineTop / contentHeight
           const marker = document.createElement('div')
           marker.className = 'cm-inspector-marker'
-          marker.style.top = `${Math.round(ratio * trackHeight) + 16}px`
+          marker.style.top = `${Math.round(ratio * trackHeight)}px`
           this.markers.appendChild(marker)
         })
       }
@@ -459,6 +555,264 @@ function createInspectorExtensions(query: string, activeIndex?: number | null) {
     createHighlightExtension(query),
     createMarkersExtension(query),
   ]
+}
+
+class RangeOverlayWidget extends WidgetType {
+  constructor(
+    private overlay: Overlay,
+    private collapsed: boolean,
+    private onToggle: (overlayId: string) => void,
+    private onEdit: (overlay: Overlay, rect: DOMRect) => void,
+    private editingOverlay: {
+      overlay: Overlay
+      label: string
+      kind?: string
+      raw: string
+      title: string
+    } | null,
+    private onTitleChange: (next: string) => void,
+    private onRawChange: (next: string) => void,
+    private onSave: () => void,
+    private onCancel: () => void,
+    private onDelete: () => void
+  ) {
+    super()
+  }
+
+  toDOM() {
+    const wrap = document.createElement('div')
+    const isEditing = this.editingOverlay?.overlay.id === this.overlay.id
+    wrap.className = `cm-overlay-block${this.collapsed ? ' collapsed' : ''}${
+      isEditing ? ' editing' : ''
+    }`
+
+    if (isEditing && this.editingOverlay) {
+      const header = document.createElement('div')
+      header.className = 'cm-overlay-header'
+      const title = document.createElement('div')
+      title.className = 'cm-overlay-title'
+      title.textContent = 'Loadgic details'
+      header.append(title)
+      wrap.append(header)
+
+      const input = document.createElement('input')
+      input.className = 'cm-overlay-input'
+      input.value = this.editingOverlay.title
+      input.addEventListener('input', () => {
+        this.onTitleChange(input.value)
+      })
+      input.addEventListener('mousedown', (event) => {
+        event.stopPropagation()
+      })
+      input.addEventListener('click', (event) => {
+        event.stopPropagation()
+      })
+      input.addEventListener('keydown', (event) => {
+        event.stopPropagation()
+      })
+      input.addEventListener('keyup', (event) => {
+        event.stopPropagation()
+      })
+
+      const textarea = document.createElement('textarea')
+      textarea.className = 'cm-overlay-textarea'
+      textarea.value = this.editingOverlay.raw
+      textarea.addEventListener('input', () => {
+        this.onRawChange(textarea.value)
+      })
+      textarea.addEventListener('mousedown', (event) => {
+        event.stopPropagation()
+      })
+      textarea.addEventListener('click', (event) => {
+        event.stopPropagation()
+      })
+      textarea.addEventListener('keydown', (event) => {
+        event.stopPropagation()
+      })
+      textarea.addEventListener('keyup', (event) => {
+        event.stopPropagation()
+      })
+
+      const actions = document.createElement('div')
+      actions.className = 'cm-overlay-actions'
+      const save = document.createElement('button')
+      save.type = 'button'
+      save.className = 'cm-overlay-edit'
+      save.textContent = 'Save'
+      save.addEventListener('click', (event) => {
+        event.stopPropagation()
+        this.onSave()
+      })
+      const cancel = document.createElement('button')
+      cancel.type = 'button'
+      cancel.className = 'cm-overlay-edit'
+      cancel.textContent = 'Cancel'
+      cancel.addEventListener('click', (event) => {
+        event.stopPropagation()
+        this.onCancel()
+      })
+      actions.append(save, cancel)
+      if (this.overlay.id) {
+        const remove = document.createElement('button')
+        remove.type = 'button'
+        remove.className = 'cm-overlay-edit'
+        remove.textContent = 'Delete'
+        remove.addEventListener('click', (event) => {
+          event.stopPropagation()
+          this.onDelete()
+        })
+        actions.append(remove)
+      }
+
+      wrap.append(input, textarea, actions)
+      return wrap
+    }
+
+    const header = document.createElement('div')
+    header.className = 'cm-overlay-header'
+
+    const title = document.createElement('div')
+    title.className = 'cm-overlay-title'
+    title.textContent = getCollapsedPreview(this.overlay.markdown)
+
+    const actions = document.createElement('div')
+    actions.className = 'cm-overlay-actions'
+
+    const toggle = document.createElement('button')
+    toggle.type = 'button'
+    toggle.className = 'cm-overlay-toggle'
+    toggle.textContent = this.collapsed ? '▸' : '▾'
+    toggle.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      this.onToggle(this.overlay.id)
+    })
+    toggle.addEventListener('mousedown', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+    })
+
+    const edit = document.createElement('button')
+    edit.type = 'button'
+    edit.className = 'cm-overlay-edit'
+    edit.textContent = 'Edit'
+    edit.addEventListener('pointerdown', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+      this.onEdit(this.overlay, wrap.getBoundingClientRect())
+    })
+    edit.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+    })
+
+    actions.append(toggle, edit)
+    header.append(title, actions)
+    wrap.append(header)
+
+    if (!this.collapsed) {
+      const body = document.createElement('div')
+      body.className = 'cm-overlay-body'
+      body.textContent = this.overlay.markdown
+      wrap.append(body)
+    }
+
+    return wrap
+  }
+
+  eq(other: RangeOverlayWidget) {
+    return (
+      other.overlay.id === this.overlay.id &&
+      other.overlay.markdown === this.overlay.markdown &&
+      other.collapsed === this.collapsed
+    )
+  }
+
+  ignoreEvent() {
+    return true
+  }
+}
+
+function createRangeOverlayExtension(
+  overlays: EditorOverlay[],
+  collapsedIds: Set<string>,
+  onToggle: (overlayId: string) => void,
+  onEdit: (overlay: Overlay, rect: DOMRect) => void,
+  editingOverlay: {
+    overlay: Overlay
+    label: string
+    kind?: string
+    raw: string
+    title: string
+  } | null,
+  onTitleChange: (next: string) => void,
+  onRawChange: (next: string) => void,
+  onSave: () => void,
+  onCancel: () => void,
+  onDelete: () => void
+) {
+  if (!overlays.length) return []
+  return ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet
+      constructor(view: EditorView) {
+        this.decorations = this.buildDecorations(view)
+      }
+      update(update: ViewUpdate) {
+        if (update.docChanged || update.viewportChanged) {
+          this.decorations = this.buildDecorations(update.view)
+        }
+      }
+      buildDecorations(view: EditorView) {
+        const builder: Range<Decoration>[] = []
+        overlays.forEach(({ overlay, range }) => {
+          const from = positionFromLineColInDoc(
+            view.state.doc,
+            range.startLine,
+            range.startCol
+          )
+          const to = positionFromLineColInDoc(
+            view.state.doc,
+            range.endLine,
+            range.endCol
+          )
+          if (from >= to) return
+          const isCollapsed = collapsedIds.has(overlay.id)
+          if (!isCollapsed && editingOverlay?.overlay.id !== overlay.id) {
+            builder.push(
+              Decoration.mark({ class: 'cm-overlay-range' }).range(from, to)
+            )
+          }
+          const widget = new RangeOverlayWidget(
+            overlay,
+            isCollapsed,
+            onToggle,
+            onEdit,
+            editingOverlay,
+            onTitleChange,
+            onRawChange,
+            onSave,
+            onCancel,
+            onDelete
+          )
+          builder.push(
+            Decoration.widget({
+              widget,
+              side: -1,
+            }).range(from)
+          )
+        })
+        return Decoration.set(builder, true)
+      }
+    },
+    {
+      decorations: (plugin) => plugin.decorations,
+    }
+  )
 }
 
 // Main FileViewer component
@@ -502,15 +856,24 @@ export default function FileViewer({
     null
   )
   const [inlineOverlay, setInlineOverlay] = useState<{
-    symbol: SymbolInfo
-    overlayId: string | null
+    overlay: Overlay
+    label: string
+    kind?: string
     raw: string
     title: string
-    x: number
-    y: number
+    range: {
+      startLine: number
+      startCol: number
+      endLine: number
+      endCol: number
+    }
   } | null>(null)
   const [inlineOverlayLoading, setInlineOverlayLoading] = useState(false)
   const editorWrapperRef = useRef<HTMLDivElement | null>(null)
+  const [rangeOverlays, setRangeOverlays] = useState<EditorOverlay[]>([])
+  const [collapsedOverlays, setCollapsedOverlays] = useState<Set<string>>(
+    () => new Set()
+  )
 
   const highlightExtension = useMemo(
     () =>
@@ -533,6 +896,34 @@ export default function FileViewer({
     setInlineToast(message)
     window.setTimeout(() => setInlineToast(null), 1500)
   }, [])
+
+  const refreshRangeOverlays = useCallback(async () => {
+    if (!projectRoot) {
+      setRangeOverlays([])
+      return
+    }
+    const overlays = await window.loadgic?.overlaysList?.(projectRoot)
+    const next: EditorOverlay[] = []
+    overlays?.forEach((overlay) => {
+      if (overlay.target.type === 'range') {
+        if (overlay.target.filePath !== filePath) return
+        next.push({ overlay, range: overlay.target.range })
+        return
+      }
+      if (overlay.target.type === 'symbol') {
+        const match = docSymbols.find(
+          (symbol) => symbol.id === overlay.target.symbolId
+        )
+        if (!match || match.filePath !== filePath) return
+        next.push({ overlay, range: match.range })
+      }
+    })
+    setRangeOverlays(next)
+  }, [projectRoot, filePath, docSymbols])
+
+  useEffect(() => {
+    refreshRangeOverlays()
+  }, [refreshRangeOverlays])
 
   useEffect(() => {
     if (!flashRange) return
@@ -575,29 +966,40 @@ export default function FileViewer({
     if (!inlineOverlay || !projectRoot) return
     const parsed = parseLGDoc(inlineOverlay.raw)
     const overlay: Overlay = {
-      id: inlineOverlay.overlayId ?? `${inlineOverlay.symbol.id}::${Date.now()}`,
-      target: { type: 'symbol', symbolId: inlineOverlay.symbol.id },
+      ...inlineOverlay.overlay,
       raw: inlineOverlay.raw,
       markdown: parsed.markdown,
       updatedAt: new Date().toISOString(),
     }
     const saved = await window.loadgic?.overlaysUpsert?.(projectRoot, overlay)
     if (saved) {
-      setInlineOverlay((prev) =>
-        prev ? { ...prev, overlayId: saved.id } : prev
-      )
+      setInlineOverlay(null)
+      refreshRangeOverlays()
       onOverlayUpdated?.()
       showToast('Saved')
     }
-  }, [inlineOverlay, projectRoot, onOverlayUpdated, showToast])
+  }, [
+    inlineOverlay,
+    projectRoot,
+    refreshRangeOverlays,
+    onOverlayUpdated,
+    showToast,
+  ])
 
   const handleInlineOverlayDelete = useCallback(async () => {
-    if (!inlineOverlay?.overlayId || !projectRoot) return
-    await window.loadgic?.overlaysDelete?.(projectRoot, inlineOverlay.overlayId)
+    if (!inlineOverlay?.overlay.id || !projectRoot) return
+    await window.loadgic?.overlaysDelete?.(projectRoot, inlineOverlay.overlay.id)
     setInlineOverlay(null)
+    refreshRangeOverlays()
     onOverlayUpdated?.()
     showToast('Deleted')
-  }, [inlineOverlay, projectRoot, onOverlayUpdated, showToast])
+  }, [
+    inlineOverlay,
+    projectRoot,
+    refreshRangeOverlays,
+    onOverlayUpdated,
+    showToast,
+  ])
 
   const setTitleInRaw = useCallback((rawValue: string, nextTitle: string) => {
     const lines = rawValue.split(/\r?\n/)
@@ -609,38 +1011,93 @@ export default function FileViewer({
     return [`@title ${nextTitle}`.trim(), ...lines].join('\n')
   }, [])
 
+  const handleOverlayTitleChange = useCallback(
+    (nextTitle: string) => {
+      setInlineOverlay((prev) =>
+        prev
+          ? {
+              ...prev,
+              title: nextTitle,
+              raw: setTitleInRaw(prev.raw, nextTitle),
+            }
+          : prev
+      )
+    },
+    [setTitleInRaw]
+  )
+
+  const handleOverlayRawChange = useCallback((nextRaw: string) => {
+    const parsed = parseLGDoc(nextRaw)
+    setInlineOverlay((prev) =>
+      prev
+        ? {
+            ...prev,
+            raw: nextRaw,
+            title: parsed.title ?? prev.title,
+          }
+        : prev
+    )
+  }, [])
+
   const openInlineEditor = useCallback(
-    async (symbol: SymbolInfo, coords: { x: number; y: number }) => {
+    async (
+      target: Overlay['target'],
+      label: string,
+      kind: string | undefined,
+      range: {
+        startLine: number
+        startCol: number
+        endLine: number
+        endCol: number
+      }
+    ) => {
       if (!projectRoot) {
         showToast('Open a project first.')
         return
       }
-      const container = editorWrapperRef.current?.getBoundingClientRect()
-      const panelWidth = 320
-      const panelHeight = 360
-      let nextX = coords.x
-      let nextY = coords.y
-      if (container) {
-        const maxX = container.width - panelWidth - 12
-        nextX = Math.max(12, Math.min(nextX, maxX))
-        nextY = Math.max(12, nextY)
-      }
       setInlineOverlayLoading(true)
       try {
-        const overlays = await window.loadgic?.overlaysList?.(
-          projectRoot,
-          symbol.id
-        )
-        const existing = overlays?.[0] ?? null
-        const raw = existing?.raw ?? `@title ${symbol.name}\n@summary `
-        const title = parseLGDoc(raw).title ?? symbol.name
+        const overlays = await window.loadgic?.overlaysList?.(projectRoot)
+        let existing: Overlay | null = null
+        if (target.type === 'symbol') {
+          existing =
+            overlays?.find(
+              (overlay) =>
+                overlay.target.type === 'symbol' &&
+                overlay.target.symbolId === target.symbolId
+            ) ?? null
+        } else {
+          existing =
+            overlays?.find((overlay) => {
+              if (overlay.target.type !== 'range') return false
+              if (overlay.target.filePath !== target.filePath) return false
+              const a = overlay.target.range
+              const b = target.range
+              return (
+                a.startLine === b.startLine &&
+                a.startCol === b.startCol &&
+                a.endLine === b.endLine &&
+                a.endCol === b.endCol
+              )
+            }) ?? null
+        }
+        const raw = existing?.raw ?? `@title ${label}\n@summary `
+        const title = parseLGDoc(raw).title ?? label
         setInlineOverlay({
-          symbol,
-          overlayId: existing?.id ?? null,
+          overlay:
+            existing ??
+            ({
+              id: createOverlayId(target),
+              target,
+              raw,
+              markdown: parseLGDoc(raw).markdown,
+              updatedAt: new Date().toISOString(),
+            } as Overlay),
+          label,
+          kind,
           raw,
           title,
-          x: nextX,
-          y: nextY,
+          range,
         })
       } finally {
         setInlineOverlayLoading(false)
@@ -649,12 +1106,130 @@ export default function FileViewer({
     [projectRoot, showToast]
   )
 
+  const handleToggleRangeOverlay = useCallback((overlayId: string) => {
+    setCollapsedOverlays((prev) => {
+      const next = new Set(prev)
+      if (next.has(overlayId)) {
+        next.delete(overlayId)
+      } else {
+        next.add(overlayId)
+      }
+      return next
+    })
+  }, [])
+
+  const handleEditRangeOverlay = useCallback(
+    (overlay: Overlay, rect: DOMRect) => {
+      const coords = editorWrapperRef.current?.getBoundingClientRect()
+      const parsed = parseLGDoc(overlay.raw)
+      const fallbackLabel = parsed.title ?? getCollapsedPreview(overlay.markdown)
+
+      if (overlay.target.type === 'range') {
+        openInlineEditor(
+          overlay.target,
+          fallbackLabel,
+          'selection',
+          overlay.target.range
+        )
+        return
+      }
+
+      if (overlay.target.type === 'symbol') {
+        const match = docSymbols.find(
+          (symbol) => symbol.id === overlay.target.symbolId
+        )
+        if (!match) {
+          showToast('Symbol not found')
+          return
+        }
+        openInlineEditor(
+          { type: 'symbol', symbolId: match.id },
+          match.name,
+          match.kind,
+          match.range
+        )
+      }
+    },
+    [openInlineEditor, docSymbols, showToast]
+  )
+
+  const rangeOverlayExtension = useMemo(() => {
+    const overlays = [...rangeOverlays]
+    if (inlineOverlay) {
+      const existingIndex = overlays.findIndex(
+        (item) => item.overlay.id === inlineOverlay.overlay.id
+      )
+      const updatedOverlay: EditorOverlay = {
+        overlay: {
+          ...inlineOverlay.overlay,
+          raw: inlineOverlay.raw,
+          markdown: parseLGDoc(inlineOverlay.raw).markdown,
+        },
+        range: inlineOverlay.range,
+      }
+      if (existingIndex >= 0) {
+        overlays[existingIndex] = updatedOverlay
+      } else {
+        overlays.unshift(updatedOverlay)
+      }
+    }
+    return createRangeOverlayExtension(
+      overlays,
+      collapsedOverlays,
+      handleToggleRangeOverlay,
+      handleEditRangeOverlay,
+      inlineOverlay,
+      handleOverlayTitleChange,
+      handleOverlayRawChange,
+      handleInlineOverlaySave,
+      () => setInlineOverlay(null),
+      handleInlineOverlayDelete
+    )
+  }, [
+    rangeOverlays,
+    inlineOverlay,
+    collapsedOverlays,
+    handleToggleRangeOverlay,
+    handleEditRangeOverlay,
+    handleOverlayTitleChange,
+    handleOverlayRawChange,
+    handleInlineOverlaySave,
+    handleInlineOverlayDelete,
+  ])
+
   useEffect(() => {
     if (!overlayRequest || !editorView) return
     const view = editorView
-    const pos = view.posAtCoords({ x: overlayRequest.x, y: overlayRequest.y })
+    const pos = getPosFromClientPoint(
+      view,
+      overlayRequest.x,
+      overlayRequest.y
+    )
     if (pos == null) {
       showToast('No symbol found')
+      return
+    }
+    const selection = view.state.selection.main
+    if (!selection.empty) {
+      const selectionText = view.state.doc.sliceString(
+        selection.from,
+        selection.to
+      )
+      const label = formatOverlayLabel(selectionText)
+      const startLineInfo = view.state.doc.lineAt(selection.from)
+      const endLineInfo = view.state.doc.lineAt(selection.to)
+      const target: Overlay['target'] = {
+        type: 'range',
+        filePath,
+        range: {
+          startLine: startLineInfo.number,
+          startCol: selection.from - startLineInfo.from + 1,
+          endLine: endLineInfo.number,
+          endCol: selection.to - endLineInfo.from + 1,
+        },
+      }
+      setFlashRange({ from: selection.from, to: selection.to })
+      openInlineEditor(target, label, 'selection', target.range)
       return
     }
     const symbolRange = getSymbolRangeAtPosition(view.state.doc, pos)
@@ -690,9 +1265,6 @@ export default function FileViewer({
         },
       }
     })()
-    const coords = editorWrapperRef.current?.getBoundingClientRect()
-    const anchorX = coords ? overlayRequest.x - coords.left : overlayRequest.x
-    const anchorY = coords ? overlayRequest.y - coords.top : overlayRequest.y
     const from = match
       ? positionFromLineCol(
           content,
@@ -708,7 +1280,12 @@ export default function FileViewer({
         )
       : symbolRange.to
     setFlashRange({ from, to })
-    openInlineEditor(resolvedMatch, { x: anchorX, y: anchorY })
+    openInlineEditor(
+      { type: 'symbol', symbolId: resolvedMatch.id },
+      resolvedMatch.name,
+      resolvedMatch.kind,
+      resolvedMatch.range
+    )
   }, [
     overlayRequest?.nonce,
     editorView,
@@ -728,10 +1305,11 @@ export default function FileViewer({
     function handleModifierClick(event: MouseEvent) {
       const isModifierPressed = event.ctrlKey || event.metaKey
       if (!isModifierPressed || event.button !== 0) return
-      const pos = view.posAtCoords({
-        x: event.clientX,
-        y: event.clientY,
-      })
+      const pos = getPosFromClientPoint(
+        view,
+        event.clientX,
+        event.clientY
+      )
       if (pos == null) return
       const { state } = view
       const selection = state.selection
@@ -791,7 +1369,12 @@ export default function FileViewer({
       <CodeMirror
         value={content}
         theme={getEditorTheme(editorTheme, theme === 'dark')}
-        extensions={[...extensions, highlightExtension, flashExtension]}
+        extensions={[
+          ...extensions,
+          highlightExtension,
+          flashExtension,
+          rangeOverlayExtension,
+        ]}
         readOnly
         editable={false}
         basicSetup={{
@@ -807,105 +1390,8 @@ export default function FileViewer({
       {inlineToast ? (
         <div className="inline-overlay-toast">{inlineToast}</div>
       ) : null}
-      {inlineOverlay ? (
-        <div
-          className="inline-overlay-editor"
-          style={{ left: inlineOverlay.x, top: inlineOverlay.y }}
-        >
-          <div className="inline-overlay-header">
-            <div className="inline-overlay-title">Loadgic details</div>
-            <button
-              type="button"
-              className="inline-overlay-close"
-              onClick={() => setInlineOverlay(null)}
-            >
-              ✕
-            </button>
-          </div>
-          <div className="inline-overlay-meta">
-            {inlineOverlay.symbol.name} · {inlineOverlay.symbol.kind}
-          </div>
-          {inlineOverlayLoading ? (
-            <div className="inline-overlay-text">Loading…</div>
-          ) : (
-            <>
-              <input
-                className="inline-overlay-input"
-                value={inlineOverlay.title}
-                onChange={(event) => {
-                  const nextTitle = event.target.value
-                  setInlineOverlay((prev) =>
-                    prev
-                      ? {
-                          ...prev,
-                          title: nextTitle,
-                          raw: setTitleInRaw(prev.raw, nextTitle),
-                        }
-                      : prev
-                  )
-                }}
-                placeholder="Title"
-              />
-              <textarea
-                className="inline-overlay-textarea"
-                value={inlineOverlay.raw}
-                onChange={(event) => {
-                  const nextRaw = event.target.value
-                  const parsed = parseLGDoc(nextRaw)
-                  setInlineOverlay((prev) =>
-                    prev
-                      ? {
-                          ...prev,
-                          raw: nextRaw,
-                          title: parsed.title ?? prev.title,
-                        }
-                      : prev
-                  )
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Escape') {
-                    event.preventDefault()
-                    setInlineOverlay(null)
-                  }
-                  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-                    event.preventDefault()
-                    handleInlineOverlaySave()
-                  }
-                }}
-                placeholder="@title ...\n@summary ...\n@param name ...\n@returns ...\n@example\n..."
-              />
-              <div className="inline-overlay-preview">
-                <div className="inline-overlay-preview-title">Preview</div>
-                <DocRenderer markdown={parseLGDoc(inlineOverlay.raw).markdown} />
-              </div>
-              <div className="inline-overlay-actions">
-                <button
-                  type="button"
-                  className="inline-overlay-action"
-                  onClick={handleInlineOverlaySave}
-                >
-                  Save
-                </button>
-                <button
-                  type="button"
-                  className="inline-overlay-action"
-                  onClick={() => setInlineOverlay(null)}
-                >
-                  Cancel
-                </button>
-                {inlineOverlay.overlayId ? (
-                  <button
-                    type="button"
-                    className="inline-overlay-action danger"
-                    onClick={handleInlineOverlayDelete}
-                  >
-                    Delete
-                  </button>
-                ) : null}
-              </div>
-            </>
-          )}
-        </div>
+      {inlineOverlayLoading ? (
+        <div className="inline-overlay-toast">Loading…</div>
       ) : null}
     </div>
   )

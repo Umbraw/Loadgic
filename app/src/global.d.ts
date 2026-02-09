@@ -101,20 +101,59 @@ declare global {
         rootPath: string,
         symbolId?: string
       ) => Promise<
-        { id: string; target: { type: 'symbol'; symbolId: string }; raw: string; markdown: string; updatedAt: string }[]
+        {
+          id: string
+          target:
+            | { type: 'symbol'; symbolId: string }
+            | {
+                type: 'range'
+                filePath: string
+                range: {
+                  startLine: number
+                  startCol: number
+                  endLine: number
+                  endCol: number
+                }
+              }
+          raw: string
+          markdown: string
+          updatedAt: string
+        }[]
       >
       overlaysUpsert: (
         rootPath: string,
         overlay: {
           id: string
-          target: { type: 'symbol'; symbolId: string }
+          target:
+            | { type: 'symbol'; symbolId: string }
+            | {
+                type: 'range'
+                filePath: string
+                range: {
+                  startLine: number
+                  startCol: number
+                  endLine: number
+                  endCol: number
+                }
+              }
           raw: string
           markdown: string
           updatedAt: string
         }
       ) => Promise<{
         id: string
-        target: { type: 'symbol'; symbolId: string }
+        target:
+          | { type: 'symbol'; symbolId: string }
+          | {
+              type: 'range'
+              filePath: string
+              range: {
+                startLine: number
+                startCol: number
+                endLine: number
+                endCol: number
+              }
+            }
         raw: string
         markdown: string
         updatedAt: string
