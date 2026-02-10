@@ -270,10 +270,45 @@ function getCollapsedPreview(markdown: string) {
 }
 
 function formatOverlayLabel(value: string) {
-  const cleaned = value.replace(/\s+/g, ' ').trim()
+  const firstLine =
+    value
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length) ?? ''
+  const cleaned = firstLine.replace(/\s+/g, ' ').trim()
   if (!cleaned) return 'Selection'
-  if (cleaned.length <= 48) return cleaned
-  return `${cleaned.slice(0, 45)}…`
+
+  const patterns: Array<{ re: RegExp; label: (m: RegExpExecArray) => string }> =
+    [
+      {
+        re: /^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/i,
+        label: (m) => `function ${m[1]}`,
+      },
+      {
+        re: /^(?:export\s+)?class\s+([A-Za-z_$][\w$]*)/i,
+        label: (m) => `class ${m[1]}`,
+      },
+      {
+        re: /^(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?function\b/i,
+        label: (m) => `function ${m[1]}`,
+      },
+      {
+        re: /^(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?\(/i,
+        label: (m) => `function ${m[1]}`,
+      },
+      {
+        re: /^(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\b/i,
+        label: (m) => m[1],
+      },
+    ]
+
+  for (const { re, label } of patterns) {
+    const match = re.exec(cleaned)
+    if (match) return label(match)
+  }
+
+  if (cleaned.length <= 64) return cleaned
+  return `${cleaned.slice(0, 61)}…`
 }
 
 function getPosFromClientPoint(view: EditorView, x: number, y: number) {

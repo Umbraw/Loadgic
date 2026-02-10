@@ -1306,7 +1306,7 @@ button.inspector-chip:hover,
 
 .cm-overlay-block {
   display: block;
-  width: 520px;
+  width: calc(100% - 8px);
   max-width: 100%;
   box-sizing: border-box;
   margin: 10px 0 6px;
@@ -1336,10 +1336,14 @@ button.inspector-chip:hover,
   justify-content: space-between;
   gap: 10px;
   font-weight: 600;
+  flex-wrap: nowrap;
+  position: relative;
+  padding-right: 66px;
 }
 
 .cm-overlay-title {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1351,6 +1355,11 @@ button.inspector-chip:hover,
   align-items: center;
   gap: 6px;
   pointer-events: auto;
+  position: absolute;
+  top: 0;
+  right: 0;
+  margin-left: 0;
+  flex: 0 0 auto;
 }
 
 .cm-overlay-toggle,
