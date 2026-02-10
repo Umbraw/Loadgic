@@ -679,7 +679,7 @@ class RangeOverlayWidget extends WidgetType {
       })
 
       const actions = document.createElement('div')
-      actions.className = 'cm-overlay-actions'
+      actions.className = 'cm-overlay-edit-actions'
       const save = document.createElement('button')
       save.type = 'button'
       save.className = 'cm-overlay-edit'

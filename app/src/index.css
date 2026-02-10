@@ -1362,6 +1362,15 @@ button.inspector-chip:hover,
   flex: 0 0 auto;
 }
 
+.cm-overlay-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  pointer-events: auto;
+  flex-wrap: wrap;
+}
+
 .cm-overlay-toggle,
 .cm-overlay-edit {
   border: 1px solid rgba(152, 201, 255, 0.45);
