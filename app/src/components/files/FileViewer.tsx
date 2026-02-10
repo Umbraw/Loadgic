@@ -430,6 +430,7 @@ function createFlashExtension(range: { from: number; to: number } | null) {
           handleInlineOverlaySave()
         },
         'overlay-cancel': () => {
+          overlayDraftRef.current = null
           setInlineOverlay(null)
         },
         'overlay-delete': () => {
@@ -585,6 +586,15 @@ class RangeOverlayWidget extends WidgetType {
     wrap.className = `cm-overlay-block${this.collapsed ? ' collapsed' : ''}${
       isEditing ? ' editing' : ''
     }`
+    wrap.addEventListener('pointerdown', (event) => {
+      event.stopPropagation()
+    })
+    wrap.addEventListener('mousedown', (event) => {
+      event.stopPropagation()
+    })
+    wrap.addEventListener('click', (event) => {
+      event.stopPropagation()
+    })
 
     if (isEditing && this.editingOverlay) {
       const header = document.createElement('div')
@@ -698,17 +708,13 @@ class RangeOverlayWidget extends WidgetType {
     edit.type = 'button'
     edit.className = 'cm-overlay-edit'
     edit.textContent = 'Edit'
-    edit.addEventListener('pointerdown', (event) => {
+    const triggerEdit = (event: Event) => {
       event.preventDefault()
       event.stopPropagation()
-      event.stopImmediatePropagation()
       this.onEdit(this.overlay, wrap.getBoundingClientRect())
-    })
-    edit.addEventListener('click', (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation()
-    })
+    }
+    edit.addEventListener('pointerdown', triggerEdit)
+    edit.addEventListener('click', triggerEdit)
 
     actions.append(toggle, edit)
     header.append(title, actions)
@@ -725,10 +731,18 @@ class RangeOverlayWidget extends WidgetType {
   }
 
   eq(other: RangeOverlayWidget) {
+    const thisEditing = this.editingOverlay?.overlay.id === this.overlay.id
+    const otherEditing = other.editingOverlay?.overlay.id === other.overlay.id
+    const editingContentMatches =
+      !thisEditing ||
+      (other.editingOverlay?.raw === this.editingOverlay?.raw &&
+        other.editingOverlay?.title === this.editingOverlay?.title)
     return (
       other.overlay.id === this.overlay.id &&
       other.overlay.markdown === this.overlay.markdown &&
-      other.collapsed === this.collapsed
+      other.collapsed === this.collapsed &&
+      thisEditing === otherEditing &&
+      editingContentMatches
     )
   }
 
@@ -868,6 +882,7 @@ export default function FileViewer({
       endCol: number
     }
   } | null>(null)
+  const overlayDraftRef = useRef<{ title: string; raw: string } | null>(null)
   const [inlineOverlayLoading, setInlineOverlayLoading] = useState(false)
   const editorWrapperRef = useRef<HTMLDivElement | null>(null)
   const [rangeOverlays, setRangeOverlays] = useState<EditorOverlay[]>([])
@@ -964,16 +979,19 @@ export default function FileViewer({
 
   const handleInlineOverlaySave = useCallback(async () => {
     if (!inlineOverlay || !projectRoot) return
-    const parsed = parseLGDoc(inlineOverlay.raw)
+    const draft = overlayDraftRef.current
+    const raw = draft?.raw ?? inlineOverlay.raw
+    const parsed = parseLGDoc(raw)
     const overlay: Overlay = {
       ...inlineOverlay.overlay,
-      raw: inlineOverlay.raw,
+      raw,
       markdown: parsed.markdown,
       updatedAt: new Date().toISOString(),
     }
     const saved = await window.loadgic?.overlaysUpsert?.(projectRoot, overlay)
     if (saved) {
       setInlineOverlay(null)
+      overlayDraftRef.current = null
       refreshRangeOverlays()
       onOverlayUpdated?.()
       showToast('Saved')
@@ -990,6 +1008,7 @@ export default function FileViewer({
     if (!inlineOverlay?.overlay.id || !projectRoot) return
     await window.loadgic?.overlaysDelete?.(projectRoot, inlineOverlay.overlay.id)
     setInlineOverlay(null)
+    overlayDraftRef.current = null
     refreshRangeOverlays()
     onOverlayUpdated?.()
     showToast('Deleted')
@@ -1013,30 +1032,32 @@ export default function FileViewer({
 
   const handleOverlayTitleChange = useCallback(
     (nextTitle: string) => {
-      setInlineOverlay((prev) =>
-        prev
-          ? {
-              ...prev,
-              title: nextTitle,
-              raw: setTitleInRaw(prev.raw, nextTitle),
-            }
-          : prev
-      )
+      const current = overlayDraftRef.current
+      if (current) {
+        current.title = nextTitle
+        current.raw = setTitleInRaw(current.raw, nextTitle)
+        return
+      }
+      overlayDraftRef.current = {
+        title: nextTitle,
+        raw: setTitleInRaw(inlineOverlay?.raw ?? '', nextTitle),
+      }
     },
-    [setTitleInRaw]
+    [inlineOverlay?.raw, setTitleInRaw]
   )
 
   const handleOverlayRawChange = useCallback((nextRaw: string) => {
     const parsed = parseLGDoc(nextRaw)
-    setInlineOverlay((prev) =>
-      prev
-        ? {
-            ...prev,
-            raw: nextRaw,
-            title: parsed.title ?? prev.title,
-          }
-        : prev
-    )
+    const current = overlayDraftRef.current
+    if (current) {
+      current.raw = nextRaw
+      current.title = parsed.title ?? current.title
+      return
+    }
+    overlayDraftRef.current = {
+      raw: nextRaw,
+      title: parsed.title ?? inlineOverlay?.title ?? '',
+    }
   }, [])
 
   const openInlineEditor = useCallback(
@@ -1083,7 +1104,7 @@ export default function FileViewer({
         }
         const raw = existing?.raw ?? `@title ${label}\n@summary `
         const title = parseLGDoc(raw).title ?? label
-        setInlineOverlay({
+        const next = {
           overlay:
             existing ??
             ({
@@ -1098,12 +1119,42 @@ export default function FileViewer({
           raw,
           title,
           range,
-        })
+        }
+        overlayDraftRef.current = { title: next.title, raw: next.raw }
+        setInlineOverlay(next)
       } finally {
         setInlineOverlayLoading(false)
       }
     },
     [projectRoot, showToast]
+  )
+
+  const openInlineEditorFromOverlay = useCallback(
+    (
+      overlay: Overlay,
+      label: string,
+      kind: string | undefined,
+      range: {
+        startLine: number
+        startCol: number
+        endLine: number
+        endCol: number
+      }
+    ) => {
+      const raw = overlay.raw
+      const title = parseLGDoc(raw).title ?? label
+      const next = {
+        overlay,
+        label,
+        kind,
+        raw,
+        title,
+        range,
+      }
+      overlayDraftRef.current = { title: next.title, raw: next.raw }
+      setInlineOverlay(next)
+    },
+    []
   )
 
   const handleToggleRangeOverlay = useCallback((overlayId: string) => {
@@ -1125,8 +1176,8 @@ export default function FileViewer({
       const fallbackLabel = parsed.title ?? getCollapsedPreview(overlay.markdown)
 
       if (overlay.target.type === 'range') {
-        openInlineEditor(
-          overlay.target,
+        openInlineEditorFromOverlay(
+          overlay,
           fallbackLabel,
           'selection',
           overlay.target.range
@@ -1142,15 +1193,15 @@ export default function FileViewer({
           showToast('Symbol not found')
           return
         }
-        openInlineEditor(
-          { type: 'symbol', symbolId: match.id },
+        openInlineEditorFromOverlay(
+          overlay,
           match.name,
           match.kind,
           match.range
         )
       }
     },
-    [openInlineEditor, docSymbols, showToast]
+    [openInlineEditorFromOverlay, docSymbols, showToast]
   )
 
   const rangeOverlayExtension = useMemo(() => {
@@ -1182,7 +1233,10 @@ export default function FileViewer({
       handleOverlayTitleChange,
       handleOverlayRawChange,
       handleInlineOverlaySave,
-      () => setInlineOverlay(null),
+      () => {
+        overlayDraftRef.current = null
+        setInlineOverlay(null)
+      },
       handleInlineOverlayDelete
     )
   }, [
