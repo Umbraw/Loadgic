@@ -269,6 +269,61 @@ function getCollapsedPreview(markdown: string) {
   return line ?? 'Loadgic details'
 }
 
+function renderOverlayMarkdown(body: HTMLElement, markdown: string) {
+  const fragment = document.createDocumentFragment()
+  const lines = markdown.split(/\r?\n/)
+  let listItems: string[] = []
+
+  const flushList = () => {
+    if (!listItems.length) return
+    const ul = document.createElement('ul')
+    ul.className = 'cm-overlay-md-list'
+    listItems.forEach((item) => {
+      const li = document.createElement('li')
+      li.textContent = item
+      ul.append(li)
+    })
+    fragment.append(ul)
+    listItems = []
+  }
+
+  const pushParagraph = (text: string) => {
+    const p = document.createElement('p')
+    p.className = 'cm-overlay-md-paragraph'
+    p.textContent = text
+    fragment.append(p)
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line) {
+      flushList()
+      continue
+    }
+
+    if (line.startsWith('- ')) {
+      listItems.push(line.slice(2).trim())
+      continue
+    }
+
+    flushList()
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/)
+    if (headingMatch) {
+      const heading = document.createElement('div')
+      heading.className = 'cm-overlay-md-heading'
+      heading.textContent = headingMatch[2]
+      fragment.append(heading)
+      continue
+    }
+
+    pushParagraph(line)
+  }
+
+  flushList()
+  body.append(fragment)
+}
+
 function formatOverlayLabel(value: string) {
   const firstLine =
     value
@@ -721,7 +776,7 @@ class RangeOverlayWidget extends WidgetType {
     if (!this.collapsed) {
       const body = document.createElement('div')
       body.className = 'cm-overlay-body'
-      body.textContent = this.overlay.markdown
+      renderOverlayMarkdown(body, this.overlay.markdown)
       wrap.append(body)
     }
 
@@ -781,6 +836,8 @@ function createRangeOverlayExtension(
       }
       buildDecorations(view: EditorView) {
         const builder: Range<Decoration>[] = []
+        const viewportFrom = Math.max(0, view.viewport.from - 200)
+        const viewportTo = Math.min(view.state.doc.length, view.viewport.to + 200)
         overlays.forEach(({ overlay, range }) => {
           const from = positionFromLineColInDoc(
             view.state.doc,
@@ -793,6 +850,7 @@ function createRangeOverlayExtension(
             range.endCol
           )
           if (from >= to) return
+          if (to < viewportFrom || from > viewportTo) return
           const isCollapsed = collapsedIds.has(overlay.id)
           if (!isCollapsed && editingOverlay?.overlay.id !== overlay.id) {
             builder.push(
@@ -887,6 +945,7 @@ export default function FileViewer({
   const [collapsedOverlays, setCollapsedOverlays] = useState<Set<string>>(
     () => new Set()
   )
+  const refreshRangeTimerRef = useRef<number | null>(null)
 
   const highlightExtension = useMemo(
     () =>
@@ -934,9 +993,23 @@ export default function FileViewer({
     setRangeOverlays(next)
   }, [projectRoot, filePath, docSymbols])
 
-  useEffect(() => {
-    refreshRangeOverlays()
+  const scheduleRefreshRangeOverlays = useCallback(() => {
+    if (refreshRangeTimerRef.current) {
+      window.clearTimeout(refreshRangeTimerRef.current)
+    }
+    refreshRangeTimerRef.current = window.setTimeout(() => {
+      refreshRangeOverlays()
+    }, 250)
   }, [refreshRangeOverlays])
+
+  useEffect(() => {
+    scheduleRefreshRangeOverlays()
+    return () => {
+      if (refreshRangeTimerRef.current) {
+        window.clearTimeout(refreshRangeTimerRef.current)
+      }
+    }
+  }, [scheduleRefreshRangeOverlays])
 
   useEffect(() => {
     if (!flashRange) return
@@ -990,14 +1063,14 @@ export default function FileViewer({
     if (saved) {
       setInlineOverlay(null)
       overlayDraftRef.current = null
-      refreshRangeOverlays()
+      scheduleRefreshRangeOverlays()
       onOverlayUpdated?.()
       showToast('Saved')
     }
   }, [
     inlineOverlay,
     projectRoot,
-    refreshRangeOverlays,
+    scheduleRefreshRangeOverlays,
     onOverlayUpdated,
     showToast,
   ])
@@ -1007,13 +1080,13 @@ export default function FileViewer({
     await window.loadgic?.overlaysDelete?.(projectRoot, inlineOverlay.overlay.id)
     setInlineOverlay(null)
     overlayDraftRef.current = null
-    refreshRangeOverlays()
+    scheduleRefreshRangeOverlays()
     onOverlayUpdated?.()
     showToast('Deleted')
   }, [
     inlineOverlay,
     projectRoot,
-    refreshRangeOverlays,
+    scheduleRefreshRangeOverlays,
     onOverlayUpdated,
     showToast,
   ])

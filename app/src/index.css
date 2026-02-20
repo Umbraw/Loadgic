@@ -1413,6 +1413,21 @@ button.inspector-chip:hover,
   pointer-events: none;
 }
 
+.cm-overlay-md-heading {
+  font-weight: 600;
+  color: var(--text);
+  margin: 6px 0 2px;
+}
+
+.cm-overlay-md-paragraph {
+  margin: 4px 0;
+}
+
+.cm-overlay-md-list {
+  margin: 4px 0 6px;
+  padding-left: 16px;
+}
+
 /* =========================
    THEME OVERRIDES
 ========================= */
