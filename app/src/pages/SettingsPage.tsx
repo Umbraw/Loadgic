@@ -3,6 +3,7 @@ import {
   LANGUAGE_DEFINITIONS,
   CORE_LANGUAGE_IDS,
   OPTIONAL_LANGUAGE_IDS,
+  type LanguageId,
 } from '../analyzers/languages'
 
 // Toggle button for dark mode
@@ -55,13 +56,13 @@ export default function SettingsPage() {
     OPTIONAL_LANGUAGE_IDS.includes(language.id)
   )
 
-  function toggleLanguage(languageId: string) {
+  function toggleLanguage(languageId: LanguageId) {
     setAnalysisSettings((prev) => {
-      const enabled = new Set(prev.enabledLanguages)
-      if (enabled.has(languageId as any)) {
-        enabled.delete(languageId as any)
+      const enabled = new Set<LanguageId>(prev.enabledLanguages)
+      if (enabled.has(languageId)) {
+        enabled.delete(languageId)
       } else {
-        enabled.add(languageId as any)
+        enabled.add(languageId)
       }
       return { ...prev, enabledLanguages: Array.from(enabled) }
     })

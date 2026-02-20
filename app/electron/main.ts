@@ -8,6 +8,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import type * as tsType from 'typescript'
 import type { ProjectNode } from '@/types/project'
 import type { FileContent } from '@/types/file'
+import type { Overlay } from '@/types/overlay'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
 const ts = require('typescript') as typeof import('typescript')
@@ -22,14 +23,6 @@ let settingsWindow: BrowserWindow | null = null
 
 const IGNORED_DIRS = new Set(['.git', 'node_modules'])
 let currentProjectRoot: string | null = null
-
-type Overlay = {
-  id: string
-  target: { type: 'symbol'; symbolId: string }
-  raw: string
-  markdown: string
-  updatedAt: string
-}
 
 type OverlayFile = {
   version: 1
@@ -119,7 +112,7 @@ type TsSignatureHelp = {
 class TsServerClient {
   private proc: ChildProcessWithoutNullStreams
   private seq = 0
-  private pending = new Map<number, (data: any) => void>()
+  private pending = new Map<number, (data: unknown) => void>()
   private buffer = Buffer.alloc(0)
 
   constructor(tsserverPath: string) {
@@ -160,7 +153,7 @@ class TsServerClient {
     }
   }
 
-  private send(command: string, args: Record<string, any>) {
+  private send(command: string, args: Record<string, unknown>) {
     const seq = ++this.seq
     const request = JSON.stringify({
       seq,
@@ -170,12 +163,12 @@ class TsServerClient {
     })
     const payload = `Content-Length: ${Buffer.byteLength(request, 'utf-8')}\r\n\r\n${request}`
     this.proc.stdin.write(payload)
-    return new Promise<any>((resolve) => {
+    return new Promise<unknown>((resolve) => {
       this.pending.set(seq, resolve)
     })
   }
 
-  private sendNotification(command: string, args: Record<string, any>) {
+  private sendNotification(command: string, args: Record<string, unknown>) {
     const seq = ++this.seq
     const request = JSON.stringify({
       seq,
@@ -386,7 +379,7 @@ function normalizeDocumentSymbols(
 class LspClient {
   private proc: ChildProcessWithoutNullStreams
   private seq = 0
-  private pending = new Map<number, (data: any) => void>()
+  private pending = new Map<number, (data: unknown) => void>()
   private buffer = Buffer.alloc(0)
   private ready = false
 
@@ -426,7 +419,7 @@ class LspClient {
     }
   }
 
-  private send(method: string, params: Record<string, any>) {
+  private send(method: string, params: Record<string, unknown>) {
     const id = ++this.seq
     const request = JSON.stringify({
       jsonrpc: '2.0',
@@ -436,12 +429,12 @@ class LspClient {
     })
     const payload = `Content-Length: ${Buffer.byteLength(request, 'utf-8')}\r\n\r\n${request}`
     this.proc.stdin.write(payload)
-    return new Promise<any>((resolve) => {
+    return new Promise<unknown>((resolve) => {
       this.pending.set(id, resolve)
     })
   }
 
-  private notify(method: string, params: Record<string, any>) {
+  private notify(method: string, params: Record<string, unknown>) {
     const request = JSON.stringify({
       jsonrpc: '2.0',
       method,
@@ -648,7 +641,7 @@ function classifyIdentifier(node: tsType.Identifier) {
 
 function getModifierNames(node: tsType.Node) {
   if (!ts.canHaveModifiers(node)) return []
-  const modifiers = ts.getModifiers(node)
+  const modifiers = ts.getModifiers(node as tsType.HasModifiers)
   if (!modifiers || modifiers.length === 0) return []
   return modifiers.map((modifier) => ts.SyntaxKind[modifier.kind])
 }
@@ -676,28 +669,29 @@ function getJsDoc(node: tsType.Node) {
 }
 
 function isExportedNode(node: tsType.Node) {
-  const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) ?? [] : []
+  const modifiers = ts.canHaveModifiers(node)
+    ? ts.getModifiers(node as tsType.HasModifiers) ?? []
+    : []
   return modifiers.some((mod) => mod.kind === ts.SyntaxKind.ExportKeyword)
 }
 
 function isDefaultExportNode(node: tsType.Node) {
-  const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) ?? [] : []
+  const modifiers = ts.canHaveModifiers(node)
+    ? ts.getModifiers(node as tsType.HasModifiers) ?? []
+    : []
   return modifiers.some((mod) => mod.kind === ts.SyntaxKind.DefaultKeyword)
 }
 
 function isAsyncNode(node: tsType.Node) {
-  const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) ?? [] : []
+  const modifiers = ts.canHaveModifiers(node)
+    ? ts.getModifiers(node as tsType.HasModifiers) ?? []
+    : []
   return modifiers.some((mod) => mod.kind === ts.SyntaxKind.AsyncKeyword)
 }
 
 function isGeneratorNode(node: tsType.Node) {
-  if (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node)) {
-    return !!node.asteriskToken
-  }
-  if (ts.isMethodDeclaration(node)) {
-    return !!node.asteriskToken
-  }
-  return false
+  const maybe = node as tsType.Node & { asteriskToken?: unknown }
+  return Boolean(maybe.asteriskToken)
 }
 
 function getContainerName(node: tsType.Node) {
@@ -1276,7 +1270,7 @@ ipcMain.handle(
         sig?.signatures?.[sig.activeSignature ?? 0]?.label ??
         hoverParsed.signature
 
-      const normalizedSymbols = normalizeDocumentSymbols(symbols as any)
+      const normalizedSymbols = normalizeDocumentSymbols(symbols)
 
       const symbolCounts: Record<string, number> = {}
       const flattenSymbols = (items: LspDocumentSymbol[]) => {

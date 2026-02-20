@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
+import type { Overlay } from '../src/types/overlay'
 
 contextBridge.exposeInMainWorld('loadgic', {
   minimize: () => ipcRenderer.invoke('window:minimize'),
@@ -26,7 +27,7 @@ contextBridge.exposeInMainWorld('loadgic', {
   ) => ipcRenderer.invoke('py:detail', filePath, symbol, line, column),
   overlaysList: (rootPath: string, symbolId?: string) =>
     ipcRenderer.invoke('overlays:list', rootPath, symbolId),
-  overlaysUpsert: (rootPath: string, overlay: unknown) =>
+  overlaysUpsert: (rootPath: string, overlay: Overlay) =>
     ipcRenderer.invoke('overlays:upsert', rootPath, overlay),
   overlaysDelete: (rootPath: string, overlayId: string) =>
     ipcRenderer.invoke('overlays:delete', rootPath, overlayId),

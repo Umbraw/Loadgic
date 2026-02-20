@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from 'react'
 import type { ViewMode } from './types/view'
 import type { ProjectNode } from './types/project'
@@ -492,7 +493,6 @@ function App() {
   // Global context menu handler (right-click)
   useEffect(() => {
     function handleGlobalContextMenu(event: MouseEvent) {
-      console.log('contextmenu', event.target)
       const target = event.target as HTMLElement | null
       if (!target) return
       setSettingsMenu(null)
@@ -973,12 +973,14 @@ function App() {
 
       <div
         className="main"
-        style={{
-          ['--panel-width' as any]: isPanelOpen ? `${panelWidth}px` : '0px',
-          ['--inspector-width' as any]: isInspectorOpen
-            ? `${inspectorWidth}px`
-            : '0px',
-        }}
+        style={
+          {
+            '--panel-width': isPanelOpen ? `${panelWidth}px` : '0px',
+            '--inspector-width': isInspectorOpen
+              ? `${inspectorWidth}px`
+              : '0px',
+          } as CSSProperties
+        }
       >
         <Sidebar
           activeView={activeView}

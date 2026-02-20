@@ -8,6 +8,7 @@ import {
 import {
   Application,
   Container,
+  FederatedPointerEvent,
   Graphics,
   Point,
   Rectangle,
@@ -445,7 +446,7 @@ const LogicView = forwardRef<LogicViewHandle, LogicViewProps>(function LogicView
       if (isDir && onToggle) {
         container.eventMode = 'static'
         container.cursor = 'pointer'
-        container.on('pointerdown', (event: any) => {
+        container.on('pointerdown', (event: FederatedPointerEvent) => {
           const original = event?.data?.originalEvent as MouseEvent | undefined
           if (!original || original.button !== 0) return
           onToggle()
@@ -457,7 +458,7 @@ const LogicView = forwardRef<LogicViewHandle, LogicViewProps>(function LogicView
         container.cursor = 'pointer'
         container.hitArea = new Rectangle(0, 0, nodeStyle.width, nodeStyle.height)
         if (onSelectFilePath) {
-          container.on('pointerdown', (event: any) => {
+          container.on('pointerdown', (event: FederatedPointerEvent) => {
             const original = event?.data?.originalEvent as MouseEvent | undefined
             if (!original || original.button !== 0) return
             onSelectFilePath(filePath)

@@ -435,43 +435,6 @@ function createFlashExtension(range: { from: number; to: number } | null) {
     },
     {
       decorations: (plugin) => plugin.decorations,
-      eventHandlers: {
-        'overlay-title': (event) => {
-          const detail = (event as CustomEvent<string>).detail ?? ''
-          setInlineOverlay((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  title: detail,
-                  raw: setTitleInRaw(prev.raw, detail),
-                }
-              : prev
-          )
-        },
-        'overlay-raw': (event) => {
-          const detail = (event as CustomEvent<string>).detail ?? ''
-          const parsed = parseLGDoc(detail)
-          setInlineOverlay((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  raw: detail,
-                  title: parsed.title ?? prev.title,
-                }
-              : prev
-          )
-        },
-        'overlay-save': () => {
-          handleInlineOverlaySave()
-        },
-        'overlay-cancel': () => {
-          overlayDraftRef.current = null
-          setInlineOverlay(null)
-        },
-        'overlay-delete': () => {
-          handleInlineOverlayDelete()
-        },
-      },
     }
   )
 }
@@ -1206,7 +1169,6 @@ export default function FileViewer({
 
   const handleEditRangeOverlay = useCallback(
     (overlay: Overlay, rect: DOMRect) => {
-      const coords = editorWrapperRef.current?.getBoundingClientRect()
       const parsed = parseLGDoc(overlay.raw)
       const fallbackLabel = parsed.title ?? getCollapsedPreview(overlay.markdown)
 

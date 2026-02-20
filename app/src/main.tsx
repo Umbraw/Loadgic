@@ -22,5 +22,5 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
 // Listen messages from the main process
 window.loadgic?.onMainMessage?.((message) => {
-  console.log(message)
+  // Intentionally no-op: hook kept for future diagnostics.
 })
